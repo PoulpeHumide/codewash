@@ -8,6 +8,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "metrics:complexity": "eslint src --no-warn-ignored --rule \"{\\\"complexity\\\":[\\\"warn\\\",10]}\"",
+    "metrics:duplication": "jscpd src --min-tokens 50 --ignore \"**/*.test.js\" --reporters console",
     "preview": "vite preview",
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && electron-builder"
@@ -23,6 +28,7 @@
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^3.2.4",
     "autoprefixer": "^10.4.22",
     "electron": "^39.8.5",
     "electron-builder": "^26.8.1",
@@ -30,8 +36,10 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jscpd": "^4.0.5",
     "postcss": "^8.5.6",
-    "vite": "npm:rolldown-vite@7.2.5"
+    "vite": "npm:rolldown-vite@7.2.5",
+    "vitest": "^3.2.4"
   },
   "overrides": {
     "vite": "npm:rolldown-vite@7.2.5"
