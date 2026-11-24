@@ -1,2 +1,13 @@
 # Source archive: kept out of history (see docs/DEBT.md, provenance)
 *.tgz
+
+# Dependencies and generated outputs
+node_modules/
+CodeWashGame/dist/
+CodeWashGame/release/
+CodeWashGame/coverage/
+report/
+
+# Personal presentation notes (not project documentation)
+NOTES_SOUTENANCE.md
+PITCH_SOUTENANCE.md
