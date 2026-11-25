@@ -1,0 +1,6 @@
+# Mass formatting commits: hidden from `git blame` so that blame points to
+# the commit that really changed a line. GitHub reads this file automatically.
+# Locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: apply prettier to the whole codebase
+0b828029bfb1efe73b4ea75c412acb9f668a54b1
