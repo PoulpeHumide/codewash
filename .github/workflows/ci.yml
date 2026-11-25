@@ -41,6 +41,9 @@ jobs:
       - name: Lint (ESLint static analysis)
         run: npm run lint
 
+      - name: Format check (Prettier)
+        run: npm run format:check
+
       - name: Tests with coverage thresholds
         run: npm run test:coverage
 

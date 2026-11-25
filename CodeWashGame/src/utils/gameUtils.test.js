@@ -68,9 +68,7 @@ describe('progression formulas', () => {
     });
 
     it('unlocks one expected difficulty every 20 levels, capped at 7', () => {
-        expect([1, 20, 21, 40, 41, 121, 200, 999].map(getExpectedDifficulty)).toEqual([
-            1, 1, 2, 2, 3, 7, 7, 7,
-        ]);
+        expect([1, 20, 21, 40, 41, 121, 200, 999].map(getExpectedDifficulty)).toEqual([1, 1, 2, 2, 3, 7, 7, 7]);
     });
 
     it('keeps the legacy XP formulas when player level is omitted', () => {
@@ -99,8 +97,15 @@ describe('encounter cycle', () => {
     it('places a miniboss on every 10th level and a boss on every 20th', () => {
         const types = Object.fromEntries([1, 9, 10, 11, 19, 20, 21, 30, 40].map((l) => [l, getEncounterType(l)]));
         expect(types).toEqual({
-            1: 'hostile', 9: 'hostile', 10: 'miniboss', 11: 'hostile', 19: 'hostile',
-            20: 'boss', 21: 'hostile', 30: 'miniboss', 40: 'boss',
+            1: 'hostile',
+            9: 'hostile',
+            10: 'miniboss',
+            11: 'hostile',
+            19: 'hostile',
+            20: 'boss',
+            21: 'hostile',
+            30: 'miniboss',
+            40: 'boss',
         });
     });
 });

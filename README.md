@@ -46,6 +46,8 @@ Toutes les commandes se lancent depuis `CodeWashGame/` :
 | `npm run test:watch` | Tests en continu pendant le développement |
 | `npm run test:coverage` | Tests + rapport de couverture (`coverage/`), **échoue si les seuils ne sont pas atteints** |
 | `npm run lint` | Analyse statique ESLint |
+| `npm run format:check` | Vérifie le formatage (Prettier), **échoue si un fichier n'est pas formaté** |
+| `npm run format` | Formate tout le code (à lancer avant de commiter) |
 | `npm run build` | Build de production (`dist/`) |
 | `npm run metrics:complexity` | Fonctions de complexité cyclomatique > 10 (ESLint `complexity`) |
 | `npm run metrics:duplication` | Blocs dupliqués (jscpd, ≥ 50 tokens) |
@@ -54,7 +56,9 @@ Les tests actuels sont des **tests de caractérisation** : ils figent le comport
 
 ## Intégration continue
 
-`.github/workflows/ci.yml` s'exécute sur chaque pull request et sur `main` : `npm ci` → lint → tests avec seuils de couverture → build → rapport de complexité. Le résumé de couverture apparaît dans l'onglet *Summary* du run et le rapport complet est téléchargeable en artefact.
+`.github/workflows/ci.yml` s'exécute sur chaque pull request et sur `main` : `npm ci` → lint → formatage → tests avec seuils de couverture → build → rapport de complexité. Le résumé de couverture apparaît dans l'onglet *Summary* du run et le rapport complet est téléchargeable en artefact.
+
+Le style du code est fixé par `CodeWashGame/.prettierrc.json`. Le commit de reformatage global est listé dans `.git-blame-ignore-revs` : lancer une fois `git config blame.ignoreRevsFile .git-blame-ignore-revs` pour que `git blame` l'ignore en local (GitHub le fait déjà).
 
 Les seuils sont définis dans `CodeWashGame/vite.config.js` (section `test.coverage.thresholds`). Ils ne doivent que monter. En baisser un est une dette à inscrire dans `docs/DEBT.md`.
 
