@@ -10,6 +10,10 @@ export default defineConfig({
         include: ['src/**/*.test.{js,jsx}'],
         coverage: {
             provider: 'v8',
+            // AST-aware remapping maps V8 coverage back to the JSX source accurately.
+            // Without it, mounting a component reports most of its unexecuted
+            // handlers as covered (App.jsx showed 90 % of lines for 37 % real).
+            experimentalAstAwareRemapping: true,
             include: ['src/**/*.{js,jsx}'],
             exclude: ['src/**/*.test.{js,jsx}', 'src/main.jsx'],
             reporter: ['text-summary', 'text', 'lcov', 'json-summary'],
@@ -17,10 +21,10 @@ export default defineConfig({
             // Ratchet: global floors sit just under the measured coverage and must only go up.
             // Lowering one is debt and must be recorded in docs/DEBT.md.
             thresholds: {
-                lines: 24,
-                statements: 24,
-                functions: 40,
-                branches: 65,
+                lines: 17,
+                statements: 17,
+                functions: 18,
+                branches: 11,
                 // Modules already under characterization tests must stay covered.
                 'src/utils/{gameUtils,achievementUtils,mobDisplayUtils}.js': {
                     lines: 95,
