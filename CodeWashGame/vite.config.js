@@ -21,15 +21,22 @@ export default defineConfig({
             // Ratchet: global floors sit just under the measured coverage and must only go up.
             // Lowering one is debt and must be recorded in docs/DEBT.md.
             thresholds: {
-                lines: 17,
-                statements: 17,
-                functions: 18,
-                branches: 11,
+                lines: 51,
+                statements: 51,
+                functions: 42,
+                branches: 50,
                 // Modules already under characterization tests must stay covered.
                 'src/utils/{gameUtils,achievementUtils,mobDisplayUtils}.js': {
                     lines: 95,
                     statements: 95,
                     functions: 100,
+                },
+                // Save/load is characterized by mounting <App /> (App.storage.test.jsx).
+                'src/App.jsx': {
+                    lines: 36,
+                    statements: 36,
+                    functions: 29,
+                    branches: 43,
                 },
             },
         },
