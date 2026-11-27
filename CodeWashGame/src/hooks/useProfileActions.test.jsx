@@ -111,6 +111,26 @@ describe('useProfileActions', () => {
         expect(dependencies.reload).toHaveBeenCalledOnce();
     });
 
+    it('recovers corrupt profile metadata before resetting the active profile', () => {
+        localStorage.setItem('heroParentStatus_v1', '{truncated');
+        localStorage.setItem('heroProfileNames_v1', '{"1":4}');
+        const { actions, dependencies } = createActions();
+
+        actions.handleReset();
+
+        expect(JSON.parse(localStorage.getItem('heroParentStatus_v1'))).toEqual({
+            1: false,
+            2: false,
+            3: false,
+        });
+        expect(JSON.parse(localStorage.getItem('heroProfileNames_v1'))).toEqual({
+            1: 'Player 1',
+            2: 'Player 2',
+            3: 'Player 3',
+        });
+        expect(dependencies.reload).toHaveBeenCalledOnce();
+    });
+
     it('uses the browser reload default when no reload handler is injected', () => {
         const reload = vi.fn();
         vi.stubGlobal('window', { location: { reload } });

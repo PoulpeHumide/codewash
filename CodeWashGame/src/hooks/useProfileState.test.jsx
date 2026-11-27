@@ -44,12 +44,45 @@ describe('useProfileState', () => {
         });
         expect(JSON.parse(localStorage.getItem('heroProfileNames_v1'))[2]).toBe('Ranger Two');
         expect(JSON.parse(localStorage.getItem('heroParentStatus_v1'))[2]).toBe(false);
+        expect(localStorage.getItem('currentProfile_v1')).toBe('2');
+        expect(localStorage.getItem('heroProfileNames_v1')).toBe('{"2":"Ranger Two"}');
+        expect(localStorage.getItem('heroParentStatus_v1')).toBe('{"2":false}');
         expect(localStorage.getItem('borderEffect_p2')).toBe('diamond');
         expect(localStorage.getItem('borderColor_p2')).toBe('#ABCDEF');
+        const savedProfile = JSON.parse(localStorage.getItem('heroSkills_v23_p2'));
+        expect(Object.keys(savedProfile)).toEqual(['skills', 'theme', 'stats']);
+        expect(savedProfile.skills).toEqual(result.current.skills);
+        expect(savedProfile.theme).toBe('pokemon');
+        expect(savedProfile.stats).toEqual(result.current.stats);
         expect(result.current.getProfileStats(2, { reading: { level: 4 } })).toMatchObject({
             highestLevel: 4,
             theme: 'pokemon',
         });
+    });
+
+    it.each(['-1', '0', '4', '999', 'abc', 'null', 'NaN', '2.5'])(
+        'falls back to profile 1 when the stored current profile is invalid (%s)',
+        (storedProfile) => {
+            localStorage.setItem('currentProfile_v1', storedProfile);
+
+            const { result } = renderHook(() => useProfileState());
+
+            expect(result.current.currentProfile).toBe(1);
+        },
+    );
+
+    it.each([
+        ['{truncated', '{"1":"Ranger"}'],
+        ['{"1":4}', '{"1":"true"}'],
+        ['[]', 'null'],
+    ])('falls back to default profile metadata for invalid stored schemas', (names, parents) => {
+        localStorage.setItem('heroProfileNames_v1', names);
+        localStorage.setItem('heroParentStatus_v1', parents);
+
+        const { result } = renderHook(() => useProfileState());
+
+        expect(result.current.profileNames).toEqual({ 1: 'Player 1', 2: 'Player 2', 3: 'Player 3' });
+        expect(result.current.parentStatus).toEqual({ 1: false, 2: false, 3: false });
     });
 
     it('uses existing defaults and derives earned badges and achievements from current state', () => {

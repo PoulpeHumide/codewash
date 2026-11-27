@@ -76,6 +76,12 @@ describe('profile storage compatibility', () => {
         expect(skills.legacySkill.recoveryDifficulty).toBeNull();
     });
 
+    it('loads the original unwrapped skill format from the legacy profile key', () => {
+        localStorage.setItem('heroSkills_v23', JSON.stringify({ math: { level: 5, xp: 25, difficulty: 2 } }));
+
+        expect(loadSkills(1).math).toMatchObject({ level: 5, xp: 25, difficulty: 2 });
+    });
+
     it('prefers profile-specific saves and recovers from malformed skill JSON', () => {
         localStorage.setItem('heroSkills_v23', JSON.stringify({ math: { level: 3 } }));
         localStorage.setItem('heroSkills_v23_p1', JSON.stringify({ skills: { math: { level: 5 } } }));
@@ -102,6 +108,30 @@ describe('profile storage compatibility', () => {
         expect(loadStats(3)).toEqual(getDefaultStats());
         expect(warning).toHaveBeenCalledWith('Failed to parse theme:', expect.any(SyntaxError));
         expect(warning).toHaveBeenCalledWith('Failed to parse stats:', expect.any(SyntaxError));
+    });
+
+    it('uses defaults when valid JSON contains invalid theme or statistics schemas', () => {
+        localStorage.setItem(
+            'heroSkills_v23_p2',
+            JSON.stringify({
+                theme: { id: 'pokemon' },
+                stats: { totalMobsDefeated: 'many', uniqueMobsDefeated: 'zombie' },
+            }),
+        );
+
+        expect(loadTheme(2)).toBe('minecraft');
+        expect(loadStats(2)).toEqual(getDefaultStats());
+    });
+
+    it('ignores malformed skill entries and rejects non-object profile statistics', () => {
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        localStorage.setItem('heroSkills_v23_p2', JSON.stringify({ skills: { math: 'invalid' } }));
+        expect(loadSkills(2).math.level).toBe(1);
+        expect(warning).toHaveBeenCalledWith('Invalid saved skill "math"; using defaults.');
+
+        localStorage.setItem('heroSkills_v23_p3', JSON.stringify({ skills: 7 }));
+        expect(getProfileStats(3)).toBeNull();
+        expect(warning).toHaveBeenCalledWith('Invalid saved profile stats; no skill data was found.');
     });
 
     it('summarizes live, saved, missing and malformed profile data', () => {
