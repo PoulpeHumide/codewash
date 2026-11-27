@@ -2,6 +2,7 @@
  * Sound Manager Utility
  * Centralized sound management for the game including BGM shuffle, UI sounds, and mob sounds.
  */
+import { systemRandom } from './systemEffects';
 
 // BGM tracks discovered from public/assets/sounds/bgm/
 const BGM_TRACKS = [
@@ -82,12 +83,15 @@ const MOB_FOLDER_MAP = {
 
 // Class for managing BGM playback with shuffle
 class BGMManager {
-    constructor() {
+    constructor({ createAudio, random, playAudio }) {
         this.audio = null;
         this.volume = 0.3;
         this.isPlaying = false;
         this.currentTrackIndex = -1;
         this.tracks = [...BGM_TRACKS];
+        this.createAudio = createAudio;
+        this.random = random;
+        this.playAudio = playAudio;
     }
 
     setVolume(vol) {
@@ -106,14 +110,14 @@ class BGMManager {
             return this.currentTrackIndex >= 0 ? this.currentTrackIndex : 0;
         }
 
-        const randomIndex = Math.floor(Math.random() * availableIndices.length);
+        const randomIndex = Math.floor(this.random() * availableIndices.length);
         return availableIndices[randomIndex];
     }
 
     play() {
         if (!this.audio) {
             this.currentTrackIndex = this.getRandomTrack();
-            this.audio = new Audio(this.tracks[this.currentTrackIndex]);
+            this.audio = this.createAudio(this.tracks[this.currentTrackIndex]);
             this.audio.volume = this.volume;
 
             // When a track ends, play a new random track
@@ -122,7 +126,7 @@ class BGMManager {
             });
         }
 
-        this.audio.play().catch(() => {});
+        this.playAudio(this.audio, this.tracks[this.currentTrackIndex]);
         this.isPlaying = true;
     }
 
@@ -131,7 +135,7 @@ class BGMManager {
         if (this.audio) {
             this.audio.src = this.tracks[this.currentTrackIndex];
             this.audio.volume = this.volume; // Ensure volume is set for new track
-            this.audio.play().catch(() => {});
+            this.playAudio(this.audio, this.tracks[this.currentTrackIndex]);
         }
     }
 
@@ -151,84 +155,6 @@ class BGMManager {
     }
 }
 
-// Singleton BGM manager instance
-let bgmManagerInstance = null;
-
-export const getBGMManager = () => {
-    if (!bgmManagerInstance) {
-        bgmManagerInstance = new BGMManager();
-    }
-    return bgmManagerInstance;
-};
-
-// SFX volume (separate from BGM)
-let sfxVolume = 0.5;
-
-export const setSfxVolume = (vol) => {
-    sfxVolume = vol;
-};
-
-export const getSfxVolume = () => sfxVolume;
-
-/**
- * Play a UI sound
- * @param {string} soundName - Name of the UI sound (click, death, fail, levelup, etc.)
- */
-export const playUISound = (soundName) => {
-    const path = UI_SOUNDS[soundName];
-    if (!path) return;
-
-    const audio = new Audio(path);
-    audio.volume = sfxVolume;
-    audio.play().catch(() => {});
-};
-
-/**
- * Play actioncard left sound
- */
-export const playActionCardLeft = () => playUISound('actioncard_left');
-
-/**
- * Play actioncard right sound
- */
-export const playActionCardRight = () => playUISound('actioncard_right');
-
-/**
- * Play click sound
- */
-export const playClick = () => playUISound('click');
-
-/**
- * Play death sound (player death)
- */
-export const playDeath = () => playUISound('death');
-
-/**
- * Play fail sound (player takes damage but doesn't die)
- */
-export const playFail = () => playUISound('fail');
-
-/**
- * Play level up sound
- */
-export const playLevelUp = () => playUISound('levelup');
-
-/**
- * Play notification sound
- */
-export const playNotification = () => playUISound('notification');
-
-/**
- * Play successful hit sound
- */
-export const playSuccessfulHit = () => playUISound('successful_hit');
-
-/**
- * Play achievement unlock sound
- * Uses the notification sound for achievement unlocks
- */
-export const playAchievement = () => playUISound('notification');
-
 /**
  * Get the folder name for a mob
  * @param {string} mobName - Display name of the mob
@@ -239,47 +165,111 @@ const getMobFolder = (mobName) => {
     return MOB_FOLDER_MAP[mobName] || null;
 };
 
-/**
- * Play mob hurt sound
- * @param {string} mobName - Display name of the mob
- */
-export const playMobHurt = (mobName) => {
-    const folder = getMobFolder(mobName);
-    if (!folder) return;
-
-    // Use standardized naming (all files renamed to hurt.wav)
-    const audio = new Audio(`assets/sounds/mob/${folder}/hurt.wav`);
-    audio.volume = sfxVolume;
-    audio.play().catch(() => {});
+const defaultAudioErrorHandler = (error, details) => {
+    console.warn('[Audio] Playback failed:', { ...details, error });
 };
 
-/**
- * Play mob death sound
- * @param {string} mobName - Display name of the mob
- */
-export const playMobDeath = (mobName) => {
-    const folder = getMobFolder(mobName);
-    if (!folder) return;
+export const createSoundManager = ({
+    createAudio = (path) => new Audio(path),
+    random = systemRandom,
+    onAudioError = defaultAudioErrorHandler,
+} = {}) => {
+    let sfxVolume = 0.5;
 
-    // Use standardized naming (all files renamed to death.wav)
-    const audio = new Audio(`assets/sounds/mob/${folder}/death.wav`);
-    audio.volume = sfxVolume;
-    audio.play().catch(() => {});
+    const reportPlaybackError = (error, source, onPlaybackError) => {
+        try {
+            onAudioError(error, { source });
+        } catch (loggingError) {
+            console.error('[Audio] Error handler failed:', loggingError);
+        }
+
+        if (onPlaybackError) {
+            try {
+                onPlaybackError(error);
+            } catch (callbackError) {
+                console.error('[Audio] Playback callback failed:', callbackError);
+            }
+        }
+    };
+
+    const playAudio = (audio, source, onPlaybackError) => {
+        try {
+            const playback = audio.play();
+            if (playback && typeof playback.catch === 'function') {
+                playback.catch((error) => reportPlaybackError(error, source, onPlaybackError));
+            }
+        } catch (error) {
+            reportPlaybackError(error, source, onPlaybackError);
+        }
+    };
+
+    const playAudioAsset = (path, { onPlaybackError } = {}) => {
+        const audio = createAudio(path);
+        audio.volume = sfxVolume;
+        playAudio(audio, path, onPlaybackError);
+        return audio;
+    };
+
+    const playUISound = (soundName) => {
+        const path = UI_SOUNDS[soundName];
+        if (!path) return;
+        playAudioAsset(path);
+    };
+
+    const playMobSound = (mobName, soundName) => {
+        const folder = getMobFolder(mobName);
+        if (!folder) return;
+        playAudioAsset(`assets/sounds/mob/${folder}/${soundName}.wav`);
+    };
+
+    const bgmManager = new BGMManager({
+        createAudio,
+        random,
+        playAudio: (audio, source) => playAudio(audio, source),
+    });
+
+    return {
+        getBGMManager: () => bgmManager,
+        getSfxVolume: () => sfxVolume,
+        setSfxVolume: (volume) => {
+            sfxVolume = volume;
+        },
+        playAudioAsset,
+        playUISound,
+        playActionCardLeft: () => playUISound('actioncard_left'),
+        playActionCardRight: () => playUISound('actioncard_right'),
+        playClick: () => playUISound('click'),
+        playDeath: () => playUISound('death'),
+        playFail: () => playUISound('fail'),
+        playLevelUp: () => playUISound('levelup'),
+        playNotification: () => playUISound('notification'),
+        playSuccessfulHit: () => playUISound('successful_hit'),
+        playAchievement: () => playUISound('notification'),
+        playMobHurt: (mobName) => playMobSound(mobName, 'hurt'),
+        playMobDeath: (mobName) => playMobSound(mobName, 'death'),
+        playMobSay: (mobName) => playMobSound(mobName, 'say'),
+    };
 };
 
-/**
- * Play mob say sound (for friendly mobs)
- * @param {string} mobName - Display name of the mob
- */
-export const playMobSay = (mobName) => {
-    const folder = getMobFolder(mobName);
-    if (!folder) return;
+const defaultSoundManager = createSoundManager();
 
-    // Use standardized naming (all files renamed to say.wav)
-    const audio = new Audio(`assets/sounds/mob/${folder}/say.wav`);
-    audio.volume = sfxVolume;
-    audio.play().catch(() => {});
-};
+export const getBGMManager = () => defaultSoundManager.getBGMManager();
+export const getSfxVolume = () => defaultSoundManager.getSfxVolume();
+export const setSfxVolume = (volume) => defaultSoundManager.setSfxVolume(volume);
+export const playAudioAsset = (...args) => defaultSoundManager.playAudioAsset(...args);
+export const playUISound = (...args) => defaultSoundManager.playUISound(...args);
+export const playActionCardLeft = () => defaultSoundManager.playActionCardLeft();
+export const playActionCardRight = () => defaultSoundManager.playActionCardRight();
+export const playClick = () => defaultSoundManager.playClick();
+export const playDeath = () => defaultSoundManager.playDeath();
+export const playFail = () => defaultSoundManager.playFail();
+export const playLevelUp = () => defaultSoundManager.playLevelUp();
+export const playNotification = () => defaultSoundManager.playNotification();
+export const playSuccessfulHit = () => defaultSoundManager.playSuccessfulHit();
+export const playAchievement = () => defaultSoundManager.playAchievement();
+export const playMobHurt = (mobName) => defaultSoundManager.playMobHurt(mobName);
+export const playMobDeath = (mobName) => defaultSoundManager.playMobDeath(mobName);
+export const playMobSay = (mobName) => defaultSoundManager.playMobSay(mobName);
 
 // Export UI sound names for reference
 export const UI_SOUND_NAMES = Object.keys(UI_SOUNDS);

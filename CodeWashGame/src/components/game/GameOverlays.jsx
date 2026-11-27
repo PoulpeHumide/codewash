@@ -2,6 +2,8 @@ import { Gift } from 'lucide-react';
 import PhantomEvent from '../PhantomEvent';
 import AchievementToast from '../ui/AchievementToast';
 import SafeImage from '../ui/SafeImage';
+import useManagedTimers from '../../hooks/minigames/useManagedTimers';
+import { systemClock, systemRandom, systemTimers } from '../../utils/systemEffects';
 
 export default function GameOverlays({
     lootBox,
@@ -13,7 +15,12 @@ export default function GameOverlays({
     setStats,
     checkAchievements,
     skills,
+    clock = systemClock,
+    random = systemRandom,
+    timers = systemTimers,
 }) {
+    const { scheduleTimeout } = useManagedTimers(true, timers);
+
     return (
         <>
             {lootBox && (
@@ -80,6 +87,9 @@ export default function GameOverlays({
             <PhantomEvent
                 battlingSkillId={battlingSkillId}
                 onAwardLevel={handlePhantomLevelAward}
+                clock={clock}
+                random={random}
+                timers={timers}
                 onPhantomCaught={() => {
                     setStats((previousStats) => {
                         const newStats = {
@@ -87,7 +97,7 @@ export default function GameOverlays({
                             phantomsCaught: (previousStats.phantomsCaught || 0) + 1,
                         };
 
-                        setTimeout(() => {
+                        scheduleTimeout(() => {
                             checkAchievements(previousStats, newStats, skills, skills);
                         }, 100);
 

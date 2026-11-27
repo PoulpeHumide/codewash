@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BASE_ASSETS, DIFFICULTY_CONTENT, FRIENDLY_MOBS, HOMOPHONES } from '../../constants/gameData';
-import { getSfxVolume, playClick } from '../../utils/soundManager';
+import { playAudioAsset, playClick } from '../../utils/soundManager';
+import { systemRandom, systemTimers } from '../../utils/systemEffects';
 import {
     canFlipMemoryCard,
     createMemoryDeck,
@@ -41,8 +42,10 @@ const useSkillCardMiniGames = ({
     damageNumbers,
     difficulty,
     onMathSubmit,
+    random = systemRandom,
+    timers = systemTimers,
 }) => {
-    const { scheduleTimeout } = useManagedTimers(isBattling);
+    const { scheduleTimeout } = useManagedTimers(isBattling, timers);
     const [mathInput, setMathInput] = useState('');
     const [isHit, setIsHit] = useState(false);
     const [isWrong, setIsWrong] = useState(false);
@@ -72,15 +75,11 @@ const useSkillCardMiniGames = ({
             playClick();
             return;
         }
-        const audio = new Audio(`assets/sounds/axolotl/${noteName}.wav`);
-        audio.volume = getSfxVolume();
-        audio.play().catch(() => playClick());
+        playAudioAsset(`assets/sounds/axolotl/${noteName}.wav`, { onPlaybackError: playClick });
     }, []);
 
     const playMismatch = useCallback(() => {
-        const audio = new Audio(BASE_ASSETS.audio.mismatch);
-        audio.volume = getSfxVolume();
-        audio.play().catch(() => {});
+        playAudioAsset(BASE_ASSETS.audio.mismatch);
     }, []);
 
     useEffect(() => {
@@ -171,23 +170,21 @@ const useSkillCardMiniGames = ({
     );
 
     const startSimonGame = useCallback(() => {
-        const firstColor = axolotlColors[Math.floor(Math.random() * axolotlColors.length)];
+        const firstColor = axolotlColors[Math.floor(random() * axolotlColors.length)];
         const newSequence = [firstColor];
         setSimonSequence(newSequence);
         setPlayerIndex(0);
         setCompletedRounds(0);
         setSimonGameActive(true);
         playSequence(newSequence);
-    }, [axolotlColors, playSequence]);
+    }, [axolotlColors, playSequence, random]);
 
     const handleAxolotlClick = (color) => {
         if (isShowingSequence || !simonGameActive) return;
         playAxolotlNote(color);
         const inputResult = getSimonInputResult(simonSequence, playerIndex, color);
         if (inputResult === 'wrong') {
-            const mismatchAudio = new Audio(BASE_ASSETS.audio.mismatch);
-            mismatchAudio.volume = getSfxVolume();
-            mismatchAudio.play().catch(() => {});
+            playAudioAsset(BASE_ASSETS.audio.mismatch);
             setSimonGameActive(false);
             return;
         }
@@ -196,9 +193,7 @@ const useSkillCardMiniGames = ({
             return;
         }
 
-        const matchAudio = new Audio(BASE_ASSETS.audio.match);
-        matchAudio.volume = getSfxVolume();
-        matchAudio.play().catch(() => {});
+        playAudioAsset(BASE_ASSETS.audio.match);
         const newRounds = completedRounds + 1;
         setCompletedRounds(newRounds);
         scheduleTimeout(() => onMathSubmit('WIN', getSimonRoundDamage(newRounds)), 300);
@@ -233,9 +228,7 @@ const useSkillCardMiniGames = ({
         setIsProcessingMatch(true);
         scheduleTimeout(() => {
             if (isMatchingMemoryPair(memoryCards, newFlipped[0], newFlipped[1])) {
-                const matchAudio = new Audio(BASE_ASSETS.audio.match);
-                matchAudio.volume = getSfxVolume();
-                matchAudio.play().catch(() => {});
+                playAudioAsset(BASE_ASSETS.audio.match);
                 const newMatched = [...matchedPairs, memoryCards[newFlipped[0]].color];
                 setMatchedPairs(newMatched);
                 setFlippedIndices([]);
@@ -244,9 +237,7 @@ const useSkillCardMiniGames = ({
                 return;
             }
 
-            const mismatchAudio = new Audio(BASE_ASSETS.audio.mismatch);
-            mismatchAudio.volume = getSfxVolume();
-            mismatchAudio.play().catch(() => {});
+            playAudioAsset(BASE_ASSETS.audio.mismatch);
             setMismatchShake(true);
             scheduleTimeout(() => {
                 setMismatchShake(false);

@@ -8,6 +8,8 @@ import GameOverlays from './components/game/GameOverlays';
 import useSpeechRecognition from './hooks/useSpeechRecognition';
 import useProfileState from './hooks/useProfileState';
 import useCombatActions from './hooks/useCombatActions';
+import useManagedTimers from './hooks/minigames/useManagedTimers';
+import useAutoDismiss from './hooks/useAutoDismiss';
 import createProfileActions from './hooks/useProfileActions';
 import createGameActions from './hooks/gameActions';
 
@@ -29,8 +31,11 @@ import {
     playAchievement,
 } from './utils/soundManager';
 import { getNewlyUnlockedAchievements, getNewTierAchievements } from './utils/achievementUtils';
+import { isSpeechRecognitionSupported } from './utils/speechRecognition';
+import { systemClock, systemRandom, systemTimers } from './utils/systemEffects';
 
-const App = () => {
+const App = ({ clock = systemClock, random = systemRandom, timers = systemTimers, speechRecognitionFactory } = {}) => {
+    const { scheduleTimeout } = useManagedTimers(true, timers);
     const {
         currentProfile,
         setCurrentProfile,
@@ -63,6 +68,7 @@ const App = () => {
         setParentStatus,
         loadSkills,
         loadTheme,
+        scheduleTimeout,
     });
     const [playerHealth, setPlayerHealth] = useState(10);
     const [achievementToast, setAchievementToast] = useState(null);
@@ -136,7 +142,7 @@ const App = () => {
     const generateChallenge = (type, diff) => {
         // Math: Use difficulty-based problem generation
         if (type === 'math') {
-            return generateMathProblem(diff);
+            return generateMathProblem(diff, random);
         }
         // Patterns: Simon Says - no challenge data needed, handled in SkillCard
         if (type === 'patterns') {
@@ -144,12 +150,12 @@ const App = () => {
         }
         // Reading: Use difficulty-based word selection
         if (type === 'reading') {
-            const word = getReadingWord(diff);
+            const word = getReadingWord(diff, random);
             return { type, question: word, answer: word };
         }
         // Writing: Use difficulty-based word selection from comprehensive index
         if (type === 'writing') {
-            const wordData = getWordForDifficulty(diff);
+            const wordData = getWordForDifficulty(diff, random);
             // Use displayName in uppercase for the answer (handles multi-word items with spaces)
             const answer = wordData.displayName.toUpperCase();
             return {
@@ -200,6 +206,8 @@ const App = () => {
         battlingSkillId,
         challengeData,
         handleSuccessHit: (...args) => handleSuccessHitRef.current(...args),
+        speechRecognitionFactory,
+        timers,
     });
     const { handleSuccessHit } = useCombatActions({
         skills,
@@ -220,6 +228,8 @@ const App = () => {
         setSpokenText: (...args) => setSpokenTextRef.current(...args),
         checkAchievements,
         generateChallenge,
+        random,
+        timers,
     });
     handleSuccessHitRef.current = handleSuccessHit;
     setSpokenTextRef.current = speech.setSpokenText;
@@ -253,6 +263,7 @@ const App = () => {
         setStats,
         checkAchievements,
         setLootBox,
+        scheduleTimeout,
     });
 
     const startBattle = (id) => {
@@ -272,7 +283,9 @@ const App = () => {
         setChallengeData(generateChallenge(skill.challengeType, challengeDiff));
         playClick();
         startBGM(); // Start BGM on first battle (user interaction)
-        if (skill.challengeType === 'reading' && window.webkitSpeechRecognition) startVoiceListener(id);
+        if (skill.challengeType === 'reading' && isSpeechRecognitionSupported(globalThis.window || globalThis)) {
+            startVoiceListener(id);
+        }
     };
 
     const endBattle = () => {
@@ -284,23 +297,17 @@ const App = () => {
         playClick();
     };
 
-    useEffect(() => {
-        if (lootBox) setTimeout(() => setLootBox(null), 4000);
-    }, [lootBox]);
-
-    // Achievement toast auto-dismiss
-    useEffect(() => {
-        if (achievementToast) {
-            setTimeout(() => setAchievementToast(null), 6000);
-        }
-    }, [achievementToast]);
+    const dismissLootBox = useCallback(() => setLootBox(null), []);
+    const dismissAchievementToast = useCallback(() => setAchievementToast(null), []);
+    useAutoDismiss(lootBox, dismissLootBox, 4000, timers);
+    useAutoDismiss(achievementToast, dismissAchievementToast, 6000, timers);
 
     // Track login date (once per day)
     useEffect(() => {
         if (loginTrackedRef.current) return; // Skip if already tracked
         loginTrackedRef.current = true;
 
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+        const today = new Date(clock.now()).toISOString().split('T')[0]; // YYYY-MM-DD format
         const currentDates = stats.loginDates || [];
         // Only set if today's date is not already recorded
         if (!currentDates.includes(today)) {
@@ -463,6 +470,9 @@ const App = () => {
                     setStats,
                     checkAchievements,
                     skills,
+                    clock,
+                    random,
+                    timers,
                 }}
             />
         </div>

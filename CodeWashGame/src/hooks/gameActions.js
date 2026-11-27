@@ -1,5 +1,6 @@
 import { SKILL_DATA, HOSTILE_MOBS } from '../constants/gameData';
 import { playLevelUp, playNotification } from '../utils/soundManager';
+import { systemTimers } from '../utils/systemEffects';
 
 export default function createGameActions({
     activeTheme,
@@ -11,6 +12,8 @@ export default function createGameActions({
     setStats,
     checkAchievements,
     setLootBox,
+    timers = systemTimers,
+    scheduleTimeout = (callback, delay) => timers.setTimeout(callback, delay),
 }) {
     const handleThemeChange = (newTheme) => {
         if (newTheme !== activeTheme) {
@@ -20,7 +23,7 @@ export default function createGameActions({
                     ...previousStats,
                     themeChanges: (previousStats.themeChanges || 0) + 1,
                 };
-                setTimeout(() => {
+                scheduleTimeout(() => {
                     checkAchievements(previousStats, newStats, skills, skills);
                 }, 100);
                 return newStats;
@@ -36,7 +39,7 @@ export default function createGameActions({
                     ...previousStats,
                     borderChanges: (previousStats.borderChanges || 0) + 1,
                 };
-                setTimeout(() => {
+                scheduleTimeout(() => {
                     checkAchievements(previousStats, newStats, skills, skills);
                 }, 100);
                 return newStats;

@@ -10,6 +10,8 @@ import {
     getRandomMob,
 } from '../utils/gameUtils';
 import { getRandomAura } from '../utils/mobDisplayUtils';
+import { systemRandom, systemTimers } from '../utils/systemEffects';
+import useManagedTimers from './minigames/useManagedTimers';
 import { BASE_ASSETS, SKILL_DATA } from '../constants/gameData';
 import { addUniqueToArray } from '../utils/achievementUtils';
 import {
@@ -70,7 +72,7 @@ const recordDefeatStats = (context, previous, current, newLevel) => {
             newStats.uniqueMobsDefeated = addUniqueToArray(newStats.uniqueMobsDefeated || [], current.currentMob);
         }
 
-        setTimeout(() => {
+        context.timers.setTimeout(() => {
             checkAchievements(previousStats, newStats, previous, {
                 ...previous,
                 [skillId]: { ...current, level: newLevel },
@@ -80,46 +82,46 @@ const recordDefeatStats = (context, previous, current, newLevel) => {
     });
 };
 
-const updateStableEncounterData = (progress, current, skillId) => {
-    if (skillId === 'memory') progress.newMemoryMob = getRandomFriendlyMob();
+const updateStableEncounterData = (progress, current, skillId, random) => {
+    if (skillId === 'memory') progress.newMemoryMob = getRandomFriendlyMob(random);
     if (skillId === 'patterns') {
-        progress.newPatternMob = getRandomMob(current.currentMob);
-        progress.newPatternMobAura = getRandomAura();
+        progress.newPatternMob = getRandomMob(current.currentMob, random);
+        progress.newPatternMobAura = getRandomAura(random);
     }
 
     const combatSkillMobUpdates = {
         reading: () => {
-            progress.newReadingMob = getRandomMob(current.readingMob);
-            progress.newReadingMobAura = getRandomAura();
+            progress.newReadingMob = getRandomMob(current.readingMob, random);
+            progress.newReadingMobAura = getRandomAura(random);
         },
         math: () => {
-            progress.newMathMob = getRandomMob(current.mathMob);
-            progress.newMathMobAura = getRandomAura();
+            progress.newMathMob = getRandomMob(current.mathMob, random);
+            progress.newMathMobAura = getRandomAura(random);
         },
         writing: () => {
-            progress.newWritingMob = getRandomMob(current.writingMob);
-            progress.newWritingMobAura = getRandomAura();
+            progress.newWritingMob = getRandomMob(current.writingMob, random);
+            progress.newWritingMobAura = getRandomAura(random);
         },
     };
     if (combatSkillMobUpdates[skillId]) combatSkillMobUpdates[skillId]();
 
     if (getEncounterType(current.level) === 'miniboss') {
-        progress.newMiniboss = getRandomMiniboss();
-        progress.newMinibossAura = getRandomAura();
+        progress.newMiniboss = getRandomMiniboss(random);
+        progress.newMinibossAura = getRandomAura(random);
     }
     if (getEncounterType(current.level) === 'boss') {
-        progress.newBoss = getRandomBoss();
-        progress.newBossAura = getRandomAura();
+        progress.newBoss = getRandomBoss(random);
+        progress.newBossAura = getRandomAura(random);
     }
 };
 
-const restoreLostLevel = (progress, setShowLevelRestored) => {
+const restoreLostLevel = (progress, setShowLevelRestored, timers) => {
     if (progress.newLostLevel) {
         progress.newLevel += 1;
         progress.newLostLevel = false;
         progress.newRecoveryDifficulty = null;
         setShowLevelRestored(true);
-        setTimeout(() => setShowLevelRestored(false), 2000);
+        timers.setTimeout(() => setShowLevelRestored(false), 2000);
         playNotification();
     }
 };
@@ -149,7 +151,7 @@ const processRankMilestones = (progress, oldLevel, skillConfig, setLootBox) => {
     }
 };
 
-const processLevelProgress = (progress, current, skillConfig, setLootBox) => {
+const processLevelProgress = (progress, current, skillConfig, setLootBox, random) => {
     const xpToLevel = calculateXPToLevel(progress.newDifficulty, progress.newLevel);
     if (progress.newXp >= xpToLevel) {
         const levelsGained = Math.floor(progress.newXp / xpToLevel);
@@ -160,14 +162,14 @@ const processLevelProgress = (progress, current, skillConfig, setLootBox) => {
         processRankMilestones(progress, oldLevel, skillConfig, setLootBox);
 
         if (progress.newLevel % 20 !== 0 && (progress.newLevel - 1) % 20 !== 0) {
-            progress.newMob = getRandomMob(current.currentMob);
+            progress.newMob = getRandomMob(current.currentMob, random);
         }
         playLevelUp();
     }
 
     progress.newMobMaxHealth = calculateMobHealth(progress.newDifficulty);
     progress.newMobHealth = progress.newMobMaxHealth;
-    if (progress.newLevel % 20 !== 0) progress.newMob = getRandomMob(current.currentMob);
+    if (progress.newLevel % 20 !== 0) progress.newMob = getRandomMob(current.currentMob, random);
 };
 
 const processDefeatedSkill = (progress, current, context, previous, skillConfig) => {
@@ -179,9 +181,9 @@ const processDefeatedSkill = (progress, current, context, previous, skillConfig)
 
     progress.newXp += totalXPReward - hitsDealt * xpPerHit;
     recordDefeatStats(context, previous, current, progress.newLevel);
-    updateStableEncounterData(progress, current, context.skillId);
-    restoreLostLevel(progress, context.setShowLevelRestored);
-    processLevelProgress(progress, current, skillConfig, context.setLootBox);
+    updateStableEncounterData(progress, current, context.skillId, context.random);
+    restoreLostLevel(progress, context.setShowLevelRestored, context.timers);
+    processLevelProgress(progress, current, skillConfig, context.setLootBox, context.random);
 };
 
 const updateSkillState = (previous, context) => {
@@ -229,7 +231,7 @@ const updateSkillState = (previous, context) => {
     };
 };
 
-const handleBossWrongAnswer = ({ battlingSkillId, skills, setSkills, setBossHealing }) => {
+const handleBossWrongAnswer = ({ battlingSkillId, skills, setSkills, setBossHealing, timers }) => {
     if (!battlingSkillId || getEncounterType(skills[battlingSkillId].level) !== 'boss') return false;
 
     setSkills((previous) => ({
@@ -240,7 +242,7 @@ const handleBossWrongAnswer = ({ battlingSkillId, skills, setSkills, setBossHeal
         },
     }));
     setBossHealing(battlingSkillId);
-    setTimeout(() => setBossHealing(null), BOSS_HEALING_ANIMATION_DURATION);
+    timers.setTimeout(() => setBossHealing(null), BOSS_HEALING_ANIMATION_DURATION);
     playFail();
     return true;
 };
@@ -253,6 +255,7 @@ const handleFatalWrongAnswer = ({
     battlingSkillId,
     setSkills,
     setBattlingSkillId,
+    timers,
 }) => {
     playDeath();
     setShowDeathOverlay(true);
@@ -261,7 +264,7 @@ const handleFatalWrongAnswer = ({
             ...previousStats,
             totalDeaths: (previousStats.totalDeaths || 0) + 1,
         };
-        setTimeout(() => checkAchievements(previousStats, newStats, skills, skills), 100);
+        timers.setTimeout(() => checkAchievements(previousStats, newStats, skills, skills), 100);
         return newStats;
     });
 
@@ -282,7 +285,7 @@ const handleFatalWrongAnswer = ({
         });
     }
 
-    setTimeout(() => {
+    timers.setTimeout(() => {
         setBattlingSkillId(null);
         setShowDeathOverlay(false);
     }, 2000);
@@ -320,7 +323,7 @@ const getHitDetails = (skillId, skills) => {
     };
 };
 
-const playHitEffects = (skillId, details, damageIdRef, setDamageNumbers) => {
+const playHitEffects = (skillId, details, damageIdRef, setDamageNumbers, random, scheduleTimeout) => {
     if (details.skillConfig.id === 'memory') return;
 
     const id = ++damageIdRef.current;
@@ -330,11 +333,11 @@ const playHitEffects = (skillId, details, damageIdRef, setDamageNumbers) => {
             id,
             skillId,
             val: details.actualDamage,
-            x: Math.random() * 100 - 50,
-            y: Math.random() * 50 - 25,
+            x: random() * 100 - 50,
+            y: random() * 50 - 25,
         },
     ]);
-    setTimeout(() => setDamageNumbers((previous) => previous.filter((number) => number.id !== id)), 800);
+    scheduleTimeout(() => setDamageNumbers((previous) => previous.filter((number) => number.id !== id)), 800);
 
     if (details.willDefeatMob) {
         playMobDeath(details.currentSkillState.currentMob);
@@ -384,9 +387,15 @@ export default function useCombatActions({
     setSpokenText,
     checkAchievements,
     generateChallenge,
+    random = systemRandom,
+    timers = systemTimers,
 }) {
+    const { scheduleTimeout } = useManagedTimers(true, timers);
+    const managedTimers = { ...timers, setTimeout: scheduleTimeout };
+
     const handleWrongAnswer = () => {
-        if (handleBossWrongAnswer({ battlingSkillId, skills, setSkills, setBossHealing })) return;
+        if (handleBossWrongAnswer({ battlingSkillId, skills, setSkills, setBossHealing, timers: managedTimers }))
+            return;
 
         setPlayerHealth((health) =>
             updatePlayerHealthAfterWrongAnswer(health, {
@@ -397,6 +406,7 @@ export default function useCombatActions({
                 battlingSkillId,
                 setSkills,
                 setBattlingSkillId,
+                timers: managedTimers,
             }),
         );
     };
@@ -405,7 +415,7 @@ export default function useCombatActions({
         if (isWrong === 'WRONG') return handleWrongAnswer();
         if (!skillId) return;
         const details = getHitDetails(skillId, skills);
-        playHitEffects(skillId, details, damageIdRef, setDamageNumbers);
+        playHitEffects(skillId, details, damageIdRef, setDamageNumbers, random, scheduleTimeout);
 
         setSkills((previous) =>
             updateSkillState(previous, {
@@ -415,6 +425,8 @@ export default function useCombatActions({
                 checkAchievements,
                 setShowLevelRestored,
                 setLootBox,
+                random,
+                timers: managedTimers,
             }),
         );
 

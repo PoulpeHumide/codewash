@@ -1,14 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
 import { HOMOPHONES } from '../constants/gameData';
+import useManagedTimers from './minigames/useManagedTimers';
+import { createSpeechRecognition, getSpeechRecognitionConstructor } from '../utils/speechRecognition';
+import { systemTimers } from '../utils/systemEffects';
 
 const MIN_SPOKEN_TEXT_LENGTH = 2;
 const MIC_OFF_TEXT = 'Mic Off';
 
-export default function useSpeechRecognition({ battlingSkillId, challengeData, handleSuccessHit }) {
+const getSpeechResult = (text, challenge) => {
+    if (!challenge || challenge.type !== 'reading') return null;
+    if (text === challenge.answer || HOMOPHONES[challenge.answer]?.includes(text)) return 'correct';
+    return text && text.length >= MIN_SPOKEN_TEXT_LENGTH ? 'wrong' : null;
+};
+
+export default function useSpeechRecognition({
+    battlingSkillId,
+    challengeData,
+    handleSuccessHit,
+    speechRecognitionFactory,
+    timers = systemTimers,
+}) {
     const [isListening, setIsListening] = useState(false);
     const [spokenText, setSpokenText] = useState('');
     const recognitionRef = useRef(null);
     const challengeDataRef = useRef(null);
+    const isMountedRef = useRef(true);
+    const { scheduleTimeout } = useManagedTimers(true, timers);
+    const getRecognitionFactory = () =>
+        speechRecognitionFactory || getSpeechRecognitionConstructor(globalThis.window || globalThis);
 
     useEffect(() => {
         challengeDataRef.current = challengeData;
@@ -28,8 +47,23 @@ export default function useSpeechRecognition({ battlingSkillId, challengeData, h
         setSpokenText(MIC_OFF_TEXT);
     };
 
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            if (!recognitionRef.current) return;
+            try {
+                recognitionRef.current.stop();
+            } catch (error) {
+                console.warn('[Speech Recognition] Error stopping:', error);
+            }
+            recognitionRef.current = null;
+        };
+    }, []);
+
     const startVoiceListener = (targetId) => {
-        if (!window.webkitSpeechRecognition) {
+        const Recognition = getRecognitionFactory();
+        if (!Recognition) {
             console.warn('[Speech Recognition] Web Speech API not available');
             return;
         }
@@ -40,21 +74,23 @@ export default function useSpeechRecognition({ battlingSkillId, challengeData, h
         }
 
         console.log('[Speech Recognition] Initializing for skill:', targetId);
-        recognitionRef.current = new window.webkitSpeechRecognition();
+        recognitionRef.current = createSpeechRecognition(Recognition);
         recognitionRef.current.lang = 'en-US';
         recognitionRef.current.continuous = true;
 
         recognitionRef.current.onstart = () => {
+            if (!isMountedRef.current) return;
             console.log('[Speech Recognition] Started listening');
             setIsListening(true);
             setSpokenText('Listening...');
         };
 
         recognitionRef.current.onend = () => {
+            if (!isMountedRef.current) return;
             console.log('[Speech Recognition] Ended');
             setIsListening(false);
             if (battlingSkillId === 'reading' || targetId === 'reading') {
-                setTimeout(() => {
+                scheduleTimeout(() => {
                     if (battlingSkillId === 'reading') {
                         console.log('[Speech Recognition] Auto-restarting');
                         recognitionRef.current = null;
@@ -67,6 +103,7 @@ export default function useSpeechRecognition({ battlingSkillId, challengeData, h
         };
 
         recognitionRef.current.onerror = (event) => {
+            if (!isMountedRef.current) return;
             console.error('[Speech Recognition] Error:', event.error);
             if (event.error === 'no-speech') {
                 console.log('[Speech Recognition] No speech detected, continuing...');
@@ -80,20 +117,19 @@ export default function useSpeechRecognition({ battlingSkillId, challengeData, h
         };
 
         recognitionRef.current.onresult = (event) => {
+            if (!isMountedRef.current) return;
             const text = event.results[event.results.length - 1][0].transcript
                 .toUpperCase()
                 .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '');
             console.log('[Speech Recognition] Recognized text:', text);
             setSpokenText(text);
-            const currentChallenge = challengeDataRef.current;
-            if (currentChallenge && currentChallenge.type === 'reading') {
-                if (text === currentChallenge.answer || HOMOPHONES[currentChallenge.answer]?.includes(text)) {
-                    console.log('[Speech Recognition] Correct answer!');
-                    handleSuccessHit(targetId || battlingSkillId);
-                } else if (text && text.length >= MIN_SPOKEN_TEXT_LENGTH) {
-                    console.log('[Speech Recognition] Wrong answer');
-                    handleSuccessHit(targetId || battlingSkillId, 'WRONG');
-                }
+            const result = getSpeechResult(text, challengeDataRef.current);
+            if (result === 'correct') {
+                console.log('[Speech Recognition] Correct answer!');
+                handleSuccessHit(targetId || battlingSkillId);
+            } else if (result === 'wrong') {
+                console.log('[Speech Recognition] Wrong answer');
+                handleSuccessHit(targetId || battlingSkillId, 'WRONG');
             }
         };
 
@@ -108,7 +144,7 @@ export default function useSpeechRecognition({ battlingSkillId, challengeData, h
     const toggleMicListener = (targetId) => {
         console.log('[Mic Toggle] isListening:', isListening);
 
-        if (!window.webkitSpeechRecognition) {
+        if (!getRecognitionFactory()) {
             console.warn('[Mic Toggle] Web Speech API not available');
             setSpokenText('Mic not available');
             return;

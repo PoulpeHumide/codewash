@@ -119,6 +119,18 @@ describe('random mob pickers', () => {
         expect(getRandomBoss()).toBe(Object.keys(BOSS_MOBS)[0]);
     });
 
+    it('uses an injected random source without consulting Math.random', () => {
+        const random = vi.fn(() => 0);
+        const mathRandom = vi.spyOn(Math, 'random').mockImplementation(() => {
+            throw new Error('global randomness should not be used');
+        });
+
+        expect(getRandomMob(null, random)).toBe(Object.keys(HOSTILE_MOBS)[0]);
+        expect(generateMathProblem(1, random).type).toBe('math');
+        expect(random).toHaveBeenCalled();
+        expect(mathRandom).not.toHaveBeenCalled();
+    });
+
     it('never returns the excluded hostile mob', () => {
         const [first, second] = Object.keys(HOSTILE_MOBS);
         mockRandom(0);

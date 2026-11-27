@@ -1,4 +1,5 @@
 // Mob display utilities for aura generation
+import { systemRandom } from './systemEffects';
 
 // Available aura types
 const AURA_TYPES = ['rainbow', 'frost', 'shadow', 'lava', 'gradient', 'sparkle', 'plasma', 'nature'];
@@ -19,8 +20,8 @@ export const AURA_ADJECTIVES = {
  * Get a random aura effect
  * @returns {string} Random aura type from AURA_TYPES
  */
-export const getRandomAura = () => {
-    return AURA_TYPES[Math.floor(Math.random() * AURA_TYPES.length)];
+export const getRandomAura = (random = systemRandom) => {
+    return AURA_TYPES[Math.floor(random() * AURA_TYPES.length)];
 };
 
 /**
@@ -29,8 +30,8 @@ export const getRandomAura = () => {
  * @param {string} mobSrc - Source path for mob image
  * @returns {object} Object with mobName, mobSrc, aura, and displayName
  */
-export const generateMobWithAura = (mobName, mobSrc) => {
-    const aura = getRandomAura();
+export const generateMobWithAura = (mobName, mobSrc, random = systemRandom) => {
+    const aura = getRandomAura(random);
     const displayName = AURA_ADJECTIVES[aura] ? `${AURA_ADJECTIVES[aura]} ${mobName}` : mobName;
 
     return {

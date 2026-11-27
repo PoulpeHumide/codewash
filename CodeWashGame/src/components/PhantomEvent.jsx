@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { HOSTILE_MOBS } from '../constants/gameData';
 import { playSuccessfulHit } from '../utils/soundManager';
 import { browserStorage } from '../utils/storage/storageAdapter';
+import { systemClock, systemRandom, systemTimers } from '../utils/systemEffects';
 
 const PHANTOM_COOLDOWN_KEY = 'phantomEvent_lastSpawn_v1';
 const MIN_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -9,12 +10,20 @@ const MAX_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 const FLIGHT_DURATION_MS = 8000; // 8 seconds to cross the screen (slow enough for a child to click)
 const PHANTOM_OFFSCREEN_LEFT = '-120px'; // Start position offscreen on the left
 
-const PhantomEvent = ({ battlingSkillId, onAwardLevel, onPhantomCaught }) => {
+const PhantomEvent = ({
+    battlingSkillId,
+    onAwardLevel,
+    onPhantomCaught,
+    clock = systemClock,
+    random = systemRandom,
+    timers = systemTimers,
+}) => {
     const [isActive, setIsActive] = useState(false);
     const [fromLeft, setFromLeft] = useState(true);
     const [clicked, setClicked] = useState(false);
     const timeoutRef = useRef(null);
     const flightTimeoutRef = useRef(null);
+    const clickTimeoutRef = useRef(null);
     const spawnPhantomRef = useRef(null);
 
     // Schedule the next phantom spawn
@@ -23,50 +32,52 @@ const PhantomEvent = ({ battlingSkillId, onAwardLevel, onPhantomCaught }) => {
         const parsedLastSpawn = Number(storedLastSpawn || 0);
         const lastSpawn = Number.isSafeInteger(parsedLastSpawn) && parsedLastSpawn >= 0 ? parsedLastSpawn : 0;
         if (storedLastSpawn && lastSpawn === 0) console.warn('Invalid phantom cooldown; using 0.');
-        const now = Date.now();
+        const now = clock.now();
         const timeSinceLastSpawn = now - lastSpawn;
 
         // Calculate how long until we can spawn again
         let delay;
         if (timeSinceLastSpawn >= MIN_COOLDOWN_MS) {
             // Cooldown has passed, spawn after a random delay (0 to 5 minutes)
-            delay = Math.random() * (MAX_COOLDOWN_MS - MIN_COOLDOWN_MS);
+            delay = random() * (MAX_COOLDOWN_MS - MIN_COOLDOWN_MS);
         } else {
             // Wait for minimum cooldown plus some random extra time
-            delay = MIN_COOLDOWN_MS - timeSinceLastSpawn + Math.random() * (MAX_COOLDOWN_MS - MIN_COOLDOWN_MS);
+            delay = MIN_COOLDOWN_MS - timeSinceLastSpawn + random() * (MAX_COOLDOWN_MS - MIN_COOLDOWN_MS);
         }
 
-        if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
+        if (timeoutRef.current !== null) {
+            timers.clearTimeout(timeoutRef.current);
         }
 
-        timeoutRef.current = setTimeout(() => {
+        timeoutRef.current = timers.setTimeout(() => {
+            timeoutRef.current = null;
             if (spawnPhantomRef.current) {
                 spawnPhantomRef.current();
             }
         }, delay);
-    }, []);
+    }, [clock, random, timers]);
 
     // Spawn the phantom
     const spawnPhantom = useCallback(() => {
         // Randomly choose direction
-        const startFromLeft = Math.random() > 0.5;
+        const startFromLeft = random() > 0.5;
         setFromLeft(startFromLeft);
         setClicked(false);
         setIsActive(true);
 
         // Record spawn time
-        browserStorage.setItem(PHANTOM_COOLDOWN_KEY, Date.now().toString());
+        browserStorage.setItem(PHANTOM_COOLDOWN_KEY, clock.now().toString());
 
         // Set timeout for when phantom reaches the other side
-        if (flightTimeoutRef.current) {
-            clearTimeout(flightTimeoutRef.current);
+        if (flightTimeoutRef.current !== null) {
+            timers.clearTimeout(flightTimeoutRef.current);
         }
-        flightTimeoutRef.current = setTimeout(() => {
+        flightTimeoutRef.current = timers.setTimeout(() => {
+            flightTimeoutRef.current = null;
             setIsActive(false);
             scheduleNextSpawn();
         }, FLIGHT_DURATION_MS);
-    }, [scheduleNextSpawn]);
+    }, [clock, random, scheduleNextSpawn, timers]);
 
     // Keep ref updated
     useEffect(() => {
@@ -93,28 +104,33 @@ const PhantomEvent = ({ battlingSkillId, onAwardLevel, onPhantomCaught }) => {
         }
 
         // Remove phantom after brief delay for visual feedback
-        setTimeout(() => {
+        clickTimeoutRef.current = timers.setTimeout(() => {
+            clickTimeoutRef.current = null;
             setIsActive(false);
-            if (flightTimeoutRef.current) {
-                clearTimeout(flightTimeoutRef.current);
+            if (flightTimeoutRef.current !== null) {
+                timers.clearTimeout(flightTimeoutRef.current);
+                flightTimeoutRef.current = null;
             }
             scheduleNextSpawn();
         }, 200);
-    }, [clicked, battlingSkillId, onAwardLevel, onPhantomCaught, scheduleNextSpawn]);
+    }, [clicked, battlingSkillId, onAwardLevel, onPhantomCaught, scheduleNextSpawn, timers]);
 
     // Initialize on mount
     useEffect(() => {
         scheduleNextSpawn();
 
         return () => {
-            if (timeoutRef.current) {
-                clearTimeout(timeoutRef.current);
+            if (timeoutRef.current !== null) {
+                timers.clearTimeout(timeoutRef.current);
             }
-            if (flightTimeoutRef.current) {
-                clearTimeout(flightTimeoutRef.current);
+            if (flightTimeoutRef.current !== null) {
+                timers.clearTimeout(flightTimeoutRef.current);
+            }
+            if (clickTimeoutRef.current !== null) {
+                timers.clearTimeout(clickTimeoutRef.current);
             }
         };
-    }, [scheduleNextSpawn]);
+    }, [scheduleNextSpawn, timers]);
 
     if (!isActive) return null;
 

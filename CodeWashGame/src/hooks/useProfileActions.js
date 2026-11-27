@@ -8,6 +8,7 @@ import {
     saveParentStatus,
     saveProfileNames,
 } from '../utils/storage/profileRepository';
+import { systemTimers } from '../utils/systemEffects';
 
 const PARENT_PRIVILEGE_LEVEL = 200;
 const PARENT_PRIVILEGE_DIFFICULTY = 7;
@@ -24,6 +25,8 @@ export default function createProfileActions({
     loadTheme,
     storage = browserStorage,
     reload = () => window.location.reload(),
+    timers = systemTimers,
+    scheduleTimeout = (callback, delay) => timers.setTimeout(callback, delay),
 }) {
     const handleSwitchProfile = (newId) => {
         if (newId === currentProfile) return;
@@ -59,7 +62,7 @@ export default function createProfileActions({
                 return updated;
             });
 
-            setTimeout(() => {
+            scheduleTimeout(() => {
                 setSkills((current) => ({ ...current }));
             }, 0);
         }
