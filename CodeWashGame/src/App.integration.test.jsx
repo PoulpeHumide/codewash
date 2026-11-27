@@ -3,6 +3,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, within, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { getReadingWord } from './utils/gameUtils';
 
 const sound = vi.hoisted(() => {
     const play = vi.fn();
@@ -120,6 +121,7 @@ describe('profile selection and editing', () => {
 
 describe('combat characterization', () => {
     it('awards the existing five-hit victory, XP and level-up state deterministically', () => {
+        vi.useFakeTimers();
         const { container } = render(<App />);
         fireEvent.click(screen.getByRole('button', { name: 'Enchant!' }));
 
@@ -127,6 +129,7 @@ describe('combat characterization', () => {
         for (let hit = 0; hit < 5; hit += 1) {
             fireEvent.click(manualSuccess);
         }
+        act(() => vi.advanceTimersByTime(100));
 
         expect(readProfile(1).skills.reading).toMatchObject({
             level: 2,
@@ -139,6 +142,7 @@ describe('combat characterization', () => {
             battlesThisSession: 1,
         });
         expect(container.querySelectorAll('svg[viewBox="0 0 48 48"]')).toHaveLength(10);
+        vi.useRealTimers();
     });
 
     it('applies wrong-answer damage and the defeat recovery after ten math errors', () => {
@@ -184,5 +188,121 @@ describe('application controls', () => {
 
         fireEvent.click(getRootButtons(container)[4]);
         expect(screen.getByText('Discovered a bug?')).not.toBeNull();
+    });
+
+    it('starts browser speech recognition and accepts the current reading answer', () => {
+        class SpeechRecognitionMock {
+            static instances = [];
+
+            constructor() {
+                this.start = vi.fn();
+                this.stop = vi.fn();
+                SpeechRecognitionMock.instances.push(this);
+            }
+        }
+
+        vi.stubGlobal('webkitSpeechRecognition', SpeechRecognitionMock);
+        render(<App />);
+        fireEvent.click(screen.getByRole('button', { name: 'Enchant!' }));
+
+        const recognition = SpeechRecognitionMock.instances[0];
+        expect(recognition.lang).toBe('en-US');
+        expect(recognition.continuous).toBe(true);
+        expect(recognition.start).toHaveBeenCalledOnce();
+
+        act(() => recognition.onstart());
+        expect(screen.getByText('Listening...')).not.toBeNull();
+
+        const answer = getReadingWord(1).toUpperCase();
+        act(() =>
+            recognition.onresult({
+                results: [[{ transcript: `${answer}.` }]],
+            }),
+        );
+
+        expect(readProfile(1).skills.reading.mobHealth).toBeLessThan(60);
+    });
+
+    it('supports fullscreen changes, all challenge types, difficulty updates, and carousel drag', async () => {
+        localStorage.setItem(
+            'heroSkills_v23_p1',
+            JSON.stringify({
+                skills: {
+                    reading: { level: 20 },
+                    math: { level: 10 },
+                },
+            }),
+        );
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+        document.documentElement.requestFullscreen = vi.fn().mockRejectedValue(new Error('blocked'));
+        document.exitFullscreen = vi.fn().mockRejectedValue(new Error('blocked'));
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const { container } = render(<App />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByTitle('Enter fullscreen'));
+            await Promise.resolve();
+        });
+        expect(document.documentElement.requestFullscreen).toHaveBeenCalledOnce();
+        act(() => document.dispatchEvent(new Event('fullscreenchange')));
+        Object.defineProperty(document, 'fullscreenElement', {
+            configurable: true,
+            value: document.documentElement,
+        });
+        act(() => document.dispatchEvent(new Event('fullscreenchange')));
+        await act(async () => {
+            fireEvent.click(screen.getByTitle('Exit fullscreen'));
+            await Promise.resolve();
+        });
+        expect(document.exitFullscreen).toHaveBeenCalledOnce();
+
+        const difficultyImage = screen.getByAltText('Difficulty 1');
+        fireEvent.click(difficultyImage.closest('div.absolute').querySelectorAll('button')[1]);
+
+        const carousel = container.querySelector('.perspective-1000');
+        fireEvent.mouseDown(carousel, { clientX: 200 });
+        fireEvent.mouseMove(carousel, { clientX: 50 });
+        fireEvent.mouseUp(carousel);
+        fireEvent.mouseDown(carousel, { clientX: 50 });
+        fireEvent.mouseMove(carousel, { clientX: 200 });
+        fireEvent.mouseUp(carousel);
+
+        for (const [nextIndex, actionName] of [
+            [1, 'Calculate!'],
+            [2, 'Craft!'],
+            [3, 'Organize!'],
+            [4, 'Match!'],
+            [5, 'Solve!'],
+        ]) {
+            if (nextIndex > 1) fireEvent.click(container.querySelectorAll('main > button')[1]);
+            fireEvent.click(screen.getByRole('button', { name: actionName }));
+            const battleBackdrop = document.querySelector('div.fixed.inset-0.z-50');
+            expect(battleBackdrop).not.toBeNull();
+            fireEvent.click(battleBackdrop);
+        }
+
+        expect(warning).toHaveBeenCalledWith('Failed to enter fullscreen:', expect.any(Error));
+        expect(warning).toHaveBeenCalledWith('Failed to exit fullscreen:', expect.any(Error));
+        expect(readProfile(1).skills.reading.difficulty).toBe(2);
+    });
+
+    it('shows a tiered achievement after a deterministic phantom catch', () => {
+        vi.useFakeTimers();
+        localStorage.setItem(
+            'heroSkills_v23_p1',
+            JSON.stringify({
+                skills: {},
+                stats: { phantomsCaught: 9 },
+            }),
+        );
+        render(<App />);
+
+        act(() => vi.advanceTimersByTime(0));
+        fireEvent.click(screen.getByAltText('Phantom'));
+        act(() => vi.advanceTimersByTime(100));
+
+        expect(readProfile(1).stats.phantomsCaught).toBe(10);
+        expect(screen.getAllByText('Silver Ghost Buster')).toHaveLength(2);
+        vi.useRealTimers();
     });
 });
