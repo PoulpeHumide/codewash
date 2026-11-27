@@ -36,6 +36,23 @@ npm run electron:dev    # build Vite puis ouverture d'Electron
 npm run electron:build  # Windows : génère release/LevelUpRPG-Portable.exe
 ```
 
+## Signaler un bogue
+
+Ouvrez le menu de signalement avec le bouton rouge en bas à droite, décrivez le problème, puis vérifiez l'aperçu avant de créer le rapport. Les captures d'écran et fichiers complémentaires sont facultatifs; le jeu limite les pièces jointes à 10 fichiers, 5 Mo par fichier et 15 Mo au total. L'état de progression et les diagnostics récents sont exclus par défaut et ne sont ajoutés qu'après activation de leurs cases. Le collecteur de diagnostics borne le buffer à 50 entrées, exclut les piles d'appel et masque les valeurs courantes de type mot de passe/jeton ainsi que les paramètres de requête dans les URL.
+
+Configurez le contact et, facultativement, un serveur HTTPS dans `CodeWashGame/.env.local` avant de lancer Vite ou de produire le build :
+
+```dotenv
+VITE_BUG_REPORT_CONTACT=bugs@example.org
+VITE_BUG_REPORT_ENDPOINT=https://reports.example.org/api/reports
+# Facultatif; par défaut, la version de CodeWashGame/package.json est utilisée.
+VITE_APP_VERSION=1.2.3
+```
+
+Ces variables `VITE_*` sont intégrées au client et ne sont pas des secrets : n'y placez ni mot de passe ni jeton. Sans endpoint, le jeu télécharge un bundle JSON local contenant le rapport et les pièces jointes; si un contact est configuré, l'interface indique de lui envoyer le bundle. En cas d'échec réseau, le même export local est proposé. Aucun serveur de réception n'est fourni dans ce dépôt.
+
+Un endpoint doit accepter une requête `POST` `multipart/form-data` avec le champ texte `report` (JSON) et zéro ou plusieurs champs `attachments`. Il doit répondre avec un statut 2xx et, facultativement, un JSON `{ "id": "..." }` (ou `204 No Content`). Le navigateur n'envoie pas de cookies d'authentification avec ce transport; le serveur doit autoriser l'origine de l'application par CORS.
+
 ## Tester et mesurer
 
 Toutes les commandes se lancent depuis `CodeWashGame/` :
