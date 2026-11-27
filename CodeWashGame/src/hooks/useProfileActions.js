@@ -1,12 +1,17 @@
 import { calculateMobHealth } from '../utils/gameUtils';
 import { getStorageKey } from '../utils/profileStorage';
 import { playClick } from '../utils/soundManager';
+import { browserStorage } from '../utils/storage/storageAdapter';
+import {
+    loadParentStatus,
+    loadProfileNames,
+    saveParentStatus,
+    saveProfileNames,
+} from '../utils/storage/profileRepository';
 
 const PARENT_PRIVILEGE_LEVEL = 200;
 const PARENT_PRIVILEGE_DIFFICULTY = 7;
 const PARENT_PRIVILEGE_BADGES = [1, 2, 3, 4, 5, 6, 7, 8];
-const DEFAULT_PROFILE_NAMES = { 1: 'Player 1', 2: 'Player 2', 3: 'Player 3' };
-const DEFAULT_PARENT_STATUS = { 1: false, 2: false, 3: false };
 
 export default function createProfileActions({
     currentProfile,
@@ -17,6 +22,7 @@ export default function createProfileActions({
     setParentStatus,
     loadSkills,
     loadTheme,
+    storage = browserStorage,
     reload = () => window.location.reload(),
 }) {
     const handleSwitchProfile = (newId) => {
@@ -60,18 +66,16 @@ export default function createProfileActions({
     };
 
     const handleReset = () => {
-        localStorage.removeItem(getStorageKey(currentProfile));
-        if (currentProfile === 1) localStorage.removeItem('heroSkills_v23');
+        storage.removeItem(getStorageKey(currentProfile));
+        if (currentProfile === 1) storage.removeItem('heroSkills_v23');
 
-        const currentParentStatus = localStorage.getItem('heroParentStatus_v1');
-        const parentStatus = currentParentStatus ? JSON.parse(currentParentStatus) : DEFAULT_PARENT_STATUS;
+        const parentStatus = loadParentStatus(storage);
         parentStatus[currentProfile] = false;
-        localStorage.setItem('heroParentStatus_v1', JSON.stringify(parentStatus));
+        saveParentStatus(parentStatus, storage);
 
-        const currentProfileNames = localStorage.getItem('heroProfileNames_v1');
-        const profileNames = currentProfileNames ? JSON.parse(currentProfileNames) : DEFAULT_PROFILE_NAMES;
+        const profileNames = loadProfileNames(storage);
         profileNames[currentProfile] = `Player ${currentProfile}`;
-        localStorage.setItem('heroProfileNames_v1', JSON.stringify(profileNames));
+        saveProfileNames(profileNames, storage);
 
         reload();
     };

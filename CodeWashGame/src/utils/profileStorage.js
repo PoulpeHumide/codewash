@@ -2,12 +2,19 @@ import { getRandomAura } from './mobDisplayUtils';
 import { calculateMobHealth, getRandomBoss, getRandomFriendlyMob, getRandomMiniboss, getRandomMob } from './gameUtils';
 import { SKILL_DATA } from '../constants/gameData';
 import { getDefaultStats } from './achievementUtils';
+import { browserStorage, createStorageAdapter } from './storage/storageAdapter';
+import { getProfileDataKey, LEGACY_PROFILE_DATA_KEY } from './storage/profileRepository';
+import { getSavedSkillsData, isRecord, isValidTheme, normalizeSavedStats } from './storage/profileSchemas';
 
-export const getStorageKey = (profileId) => `heroSkills_v23_p${profileId}`;
+const INVALID_SAVED_PROFILE = Symbol('invalid-saved-profile');
+const getStorageAdapter = (storage) =>
+    typeof storage.readJSON === 'function' ? storage : createStorageAdapter(storage);
+
+export const getStorageKey = getProfileDataKey;
 
 const readSavedProfile = (profileId, storage) => {
     let saved = storage.getItem(getStorageKey(profileId));
-    if (!saved && profileId === 1) saved = storage.getItem('heroSkills_v23');
+    if (!saved && profileId === 1) saved = storage.getItem(LEGACY_PROFILE_DATA_KEY);
     return saved;
 };
 
@@ -103,50 +110,64 @@ const normalizeSavedSkill = (initial, key, savedSkill) => {
     ensureEncounterData(skill, key);
 };
 
-export const loadSkills = (profileId, storage = localStorage) => {
+export const loadSkills = (profileId, storage = browserStorage) => {
+    const adapter = getStorageAdapter(storage);
     const initial = {};
     SKILL_DATA.forEach((skill) => {
         initial[skill.id] = createInitialSkill(skill);
     });
 
-    const saved = readSavedProfile(profileId, storage);
-    try {
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            const data = parsed.skills || parsed;
-            Object.keys(data).forEach((key) => normalizeSavedSkill(initial, key, data[key]));
+    const saved = readSavedProfile(profileId, adapter);
+    if (saved) {
+        const parsed = adapter.parseJSON(saved, INVALID_SAVED_PROFILE, 'Failed to parse saved skills:');
+        if (parsed === INVALID_SAVED_PROFILE) return initial;
+        const data = getSavedSkillsData(parsed);
+        if (!data) {
+            console.warn('Invalid saved skills; using defaults.');
             return initial;
         }
-    } catch (error) {
-        console.warn('Failed to parse saved skills:', error);
+        Object.keys(data).forEach((key) => {
+            if (!isRecord(data[key])) {
+                console.warn(`Invalid saved skill "${key}"; using defaults.`);
+                return;
+            }
+            normalizeSavedSkill(initial, key, data[key]);
+        });
     }
     return initial;
 };
 
-export const loadTheme = (profileId, storage = localStorage) => {
-    const saved = readSavedProfile(profileId, storage);
-    try {
-        return JSON.parse(saved).theme || 'minecraft';
-    } catch (error) {
-        console.warn('Failed to parse theme:', error);
-    }
+export const loadTheme = (profileId, storage = browserStorage) => {
+    const adapter = getStorageAdapter(storage);
+    const saved = readSavedProfile(profileId, adapter);
+    if (!saved) return 'minecraft';
+
+    const data = adapter.parseJSON(saved, INVALID_SAVED_PROFILE, 'Failed to parse theme:');
+    if (data === INVALID_SAVED_PROFILE) return 'minecraft';
+    if (isRecord(data) && isValidTheme(data.theme)) return data.theme;
+    if (isRecord(data) && data.theme === undefined) return 'minecraft';
+
+    console.warn('Invalid saved theme; using minecraft.');
     return 'minecraft';
 };
 
-export const loadStats = (profileId, storage = localStorage) => {
-    const saved = readSavedProfile(profileId, storage);
-    try {
-        const data = JSON.parse(saved);
-        if (data.stats) {
-            return { ...getDefaultStats(), ...data.stats };
-        }
-    } catch (error) {
-        console.warn('Failed to parse stats:', error);
-    }
+export const loadStats = (profileId, storage = browserStorage) => {
+    const adapter = getStorageAdapter(storage);
+    const saved = readSavedProfile(profileId, adapter);
+    if (!saved) return getDefaultStats();
+
+    const data = adapter.parseJSON(saved, INVALID_SAVED_PROFILE, 'Failed to parse stats:');
+    if (data === INVALID_SAVED_PROFILE) return getDefaultStats();
+    if (!isRecord(data) || data.stats === undefined) return getDefaultStats();
+
+    const stats = normalizeSavedStats(data.stats);
+    if (stats) return stats;
+
+    console.warn('Invalid saved statistics; using defaults.');
     return getDefaultStats();
 };
 
-export const getProfileStats = (id, liveSkills = null, activeTheme = 'minecraft', storage = localStorage) => {
+export const getProfileStats = (id, liveSkills = null, activeTheme = 'minecraft', storage = browserStorage) => {
     if (liveSkills) {
         let totalLevel = 0;
         let highestLevel = 0;
@@ -159,23 +180,26 @@ export const getProfileStats = (id, liveSkills = null, activeTheme = 'minecraft'
         return { totalLevel, highestLevel, skills: liveSkills, theme: activeTheme };
     }
 
-    const saved = readSavedProfile(id, storage);
+    const adapter = getStorageAdapter(storage);
+    const saved = readSavedProfile(id, adapter);
     if (!saved) return null;
-    try {
-        const data = JSON.parse(saved);
-        const skills = data.skills || data;
-        const theme = data.theme || 'minecraft';
-        let totalLevel = 0;
-        let highestLevel = 0;
-        Object.values(skills).forEach((skill) => {
-            if (skill && typeof skill.level === 'number') {
-                totalLevel += skill.level;
-                if (skill.level > highestLevel) highestLevel = skill.level;
-            }
-        });
-        return { totalLevel, highestLevel, skills, theme };
-    } catch (error) {
-        console.warn('Failed to parse profile stats:', error);
+    const data = adapter.parseJSON(saved, INVALID_SAVED_PROFILE, 'Failed to parse profile stats:');
+    if (data === INVALID_SAVED_PROFILE) return null;
+
+    const skills = getSavedSkillsData(data);
+    if (!skills) {
+        console.warn('Invalid saved profile stats; no skill data was found.');
         return null;
     }
+
+    const theme = isRecord(data) && isValidTheme(data.theme) ? data.theme : 'minecraft';
+    let totalLevel = 0;
+    let highestLevel = 0;
+    Object.values(skills).forEach((skill) => {
+        if (skill && typeof skill.level === 'number') {
+            totalLevel += skill.level;
+            if (skill.level > highestLevel) highestLevel = skill.level;
+        }
+    });
+    return { totalLevel, highestLevel, skills, theme };
 };

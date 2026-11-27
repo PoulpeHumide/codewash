@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { HOSTILE_MOBS } from '../constants/gameData';
 import { playSuccessfulHit } from '../utils/soundManager';
+import { browserStorage } from '../utils/storage/storageAdapter';
 
 const PHANTOM_COOLDOWN_KEY = 'phantomEvent_lastSpawn_v1';
 const MIN_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -18,7 +19,10 @@ const PhantomEvent = ({ battlingSkillId, onAwardLevel, onPhantomCaught }) => {
 
     // Schedule the next phantom spawn
     const scheduleNextSpawn = useCallback(() => {
-        const lastSpawn = parseInt(localStorage.getItem(PHANTOM_COOLDOWN_KEY) || '0', 10);
+        const storedLastSpawn = browserStorage.getItem(PHANTOM_COOLDOWN_KEY);
+        const parsedLastSpawn = Number(storedLastSpawn || 0);
+        const lastSpawn = Number.isSafeInteger(parsedLastSpawn) && parsedLastSpawn >= 0 ? parsedLastSpawn : 0;
+        if (storedLastSpawn && lastSpawn === 0) console.warn('Invalid phantom cooldown; using 0.');
         const now = Date.now();
         const timeSinceLastSpawn = now - lastSpawn;
 
@@ -52,7 +56,7 @@ const PhantomEvent = ({ battlingSkillId, onAwardLevel, onPhantomCaught }) => {
         setIsActive(true);
 
         // Record spawn time
-        localStorage.setItem(PHANTOM_COOLDOWN_KEY, Date.now().toString());
+        browserStorage.setItem(PHANTOM_COOLDOWN_KEY, Date.now().toString());
 
         // Set timeout for when phantom reaches the other side
         if (flightTimeoutRef.current) {

@@ -1,48 +1,45 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isAchievementUnlocked } from '../utils/achievementUtils';
 import { getProfileStats, getStorageKey, loadSkills, loadStats, loadTheme } from '../utils/profileStorage';
+import { browserStorage } from '../utils/storage/storageAdapter';
+import {
+    loadCurrentProfile,
+    loadParentStatus,
+    loadProfileNames,
+    saveCurrentProfile,
+    saveParentStatus,
+    saveProfileNames,
+} from '../utils/storage/profileRepository';
 
-const DEFAULT_PROFILE_NAMES = { 1: 'Player 1', 2: 'Player 2', 3: 'Player 3' };
-const DEFAULT_PARENT_STATUS = { 1: false, 2: false, 3: false };
 const ACHIEVEMENT_IDS = ['speed_demon', 'world_ender', 'monster_manual', 'perfectionist', 'full_set'];
 
 export default function useProfileState() {
-    const [currentProfile, setCurrentProfile] = useState(() =>
-        localStorage.getItem('currentProfile_v1') ? parseInt(localStorage.getItem('currentProfile_v1')) : 1,
-    );
-    const [profileNames, setProfileNames] = useState(() =>
-        localStorage.getItem('heroProfileNames_v1')
-            ? JSON.parse(localStorage.getItem('heroProfileNames_v1'))
-            : DEFAULT_PROFILE_NAMES,
-    );
-    const [parentStatus, setParentStatus] = useState(() =>
-        localStorage.getItem('heroParentStatus_v1')
-            ? JSON.parse(localStorage.getItem('heroParentStatus_v1'))
-            : DEFAULT_PARENT_STATUS,
-    );
-    const [skills, setSkills] = useState(() => loadSkills(currentProfile));
-    const [activeTheme, setActiveTheme] = useState(() => loadTheme(currentProfile));
-    const [stats, setStats] = useState(() => loadStats(currentProfile));
+    const [currentProfile, setCurrentProfile] = useState(() => loadCurrentProfile(browserStorage));
+    const [profileNames, setProfileNames] = useState(() => loadProfileNames(browserStorage));
+    const [parentStatus, setParentStatus] = useState(() => loadParentStatus(browserStorage));
+    const [skills, setSkills] = useState(() => loadSkills(currentProfile, browserStorage));
+    const [activeTheme, setActiveTheme] = useState(() => loadTheme(currentProfile, browserStorage));
+    const [stats, setStats] = useState(() => loadStats(currentProfile, browserStorage));
     const [selectedBorder, setSelectedBorder] = useState(() => {
-        const saved = localStorage.getItem(`borderEffect_p${currentProfile}`);
+        const saved = browserStorage.getItem(`borderEffect_p${currentProfile}`);
         return saved || 'solid';
     });
     const [borderColor, setBorderColor] = useState(() => {
-        const saved = localStorage.getItem(`borderColor_p${currentProfile}`);
+        const saved = browserStorage.getItem(`borderColor_p${currentProfile}`);
         return saved || '#FFD700';
     });
 
     useEffect(() => {
         const dataToSave = { skills: skills, theme: activeTheme, stats: stats };
-        localStorage.setItem(getStorageKey(currentProfile), JSON.stringify(dataToSave));
-        localStorage.setItem('currentProfile_v1', currentProfile);
-        localStorage.setItem('heroProfileNames_v1', JSON.stringify(profileNames));
-        localStorage.setItem('heroParentStatus_v1', JSON.stringify(parentStatus));
+        browserStorage.writeJSON(getStorageKey(currentProfile), dataToSave);
+        saveCurrentProfile(currentProfile, browserStorage);
+        saveProfileNames(profileNames, browserStorage);
+        saveParentStatus(parentStatus, browserStorage);
     }, [skills, currentProfile, activeTheme, profileNames, parentStatus, stats]);
 
     useEffect(() => {
-        localStorage.setItem(`borderEffect_p${currentProfile}`, selectedBorder);
-        localStorage.setItem(`borderColor_p${currentProfile}`, borderColor);
+        browserStorage.setItem(`borderEffect_p${currentProfile}`, selectedBorder);
+        browserStorage.setItem(`borderColor_p${currentProfile}`, borderColor);
     }, [selectedBorder, borderColor, currentProfile]);
 
     const unlockedBorders = useMemo(() => {
