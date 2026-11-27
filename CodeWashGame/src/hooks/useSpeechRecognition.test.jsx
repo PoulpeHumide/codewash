@@ -97,6 +97,22 @@ describe('useSpeechRecognition', () => {
         expect(handleSuccessHit).toHaveBeenLastCalledWith('reading');
     });
 
+    it('supports the standard SpeechRecognition constructor', () => {
+        const start = vi.fn();
+        class StandardSpeechRecognition {
+            constructor() {
+                this.start = start;
+                this.stop = vi.fn();
+            }
+        }
+        vi.stubGlobal('SpeechRecognition', StandardSpeechRecognition);
+        const { result } = createHook({ battlingSkillId: 'reading' });
+
+        act(() => result.current.startVoiceListener('reading'));
+
+        expect(start).toHaveBeenCalledOnce();
+    });
+
     it('uses the latest challenge and reports substantial wrong answers only', () => {
         createRecognition();
         const handleSuccessHit = vi.fn();
@@ -113,6 +129,18 @@ describe('useSpeechRecognition', () => {
         act(() =>
             recognition.onresult({
                 results: [[{ transcript: 'x' }]],
+            }),
+        );
+        expect(handleSuccessHit).not.toHaveBeenCalled();
+
+        rerender({
+            battlingSkillId: 'reading',
+            challengeData: null,
+            handleSuccessHit,
+        });
+        act(() =>
+            recognition.onresult({
+                results: [[{ transcript: 'cat' }]],
             }),
         );
         expect(handleSuccessHit).not.toHaveBeenCalled();
@@ -189,5 +217,27 @@ describe('useSpeechRecognition', () => {
         SpeechRecognitionMock.startError = true;
         act(() => result.current.startVoiceListener('math'));
         expect(errors).toHaveBeenCalledWith('[Speech Recognition] Failed to start:', expect.any(Error));
+    });
+
+    it('clears the pending automatic restart and stops recognition on unmount', () => {
+        vi.useFakeTimers();
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const SpeechRecognitionMock = createRecognition();
+        const { result, unmount } = createHook({ battlingSkillId: 'reading' });
+
+        act(() => result.current.startVoiceListener('reading'));
+        const recognition = SpeechRecognitionMock.instances[0];
+        act(() => recognition.onend());
+        expect(vi.getTimerCount()).toBe(1);
+        recognition.stop.mockImplementation(() => {
+            recognition.onend();
+            throw new Error('stop failed');
+        });
+
+        unmount();
+
+        expect(recognition.stop).toHaveBeenCalledOnce();
+        expect(warning).toHaveBeenCalledWith('[Speech Recognition] Error stopping:', expect.any(Error));
+        expect(vi.getTimerCount()).toBe(0);
     });
 });

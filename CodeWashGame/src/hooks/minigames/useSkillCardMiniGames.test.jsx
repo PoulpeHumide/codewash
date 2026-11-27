@@ -3,11 +3,11 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import useSkillCardMiniGames from './useSkillCardMiniGames';
 
-const sound = vi.hoisted(() => ({ playClick: vi.fn(), getSfxVolume: vi.fn(() => 0.5) }));
+const sound = vi.hoisted(() => ({ playClick: vi.fn(), playAudioAsset: vi.fn() }));
 
 vi.mock('../../utils/soundManager', () => ({
     playClick: sound.playClick,
-    getSfxVolume: sound.getSfxVolume,
+    playAudioAsset: sound.playAudioAsset,
 }));
 
 afterEach(() => {

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SkillCard from './SkillCard';
 import { SKILL_DATA, THEME_CONFIG } from '../../constants/gameData';
 
-const sound = vi.hoisted(() => ({ playClick: vi.fn(), getSfxVolume: vi.fn(() => 0.5) }));
+const sound = vi.hoisted(() => ({ playClick: vi.fn(), playAudioAsset: vi.fn() }));
 
 vi.mock('../ui/SafeImage', () => ({ default: (props) => <img {...props} /> }));
 vi.mock('../ui/MobWithAura', () => ({
@@ -22,7 +22,7 @@ vi.mock('../ui/ParentalVerificationModal', () => ({
 }));
 vi.mock('../../utils/soundManager', () => ({
     playClick: sound.playClick,
-    getSfxVolume: sound.getSfxVolume,
+    playAudioAsset: sound.playAudioAsset,
 }));
 
 const challengeFor = (skillId) => {

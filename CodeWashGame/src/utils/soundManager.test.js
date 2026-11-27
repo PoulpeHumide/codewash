@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     getBGMManager,
     getSfxVolume,
+    createSoundManager,
     playAchievement,
     playActionCardLeft,
     playActionCardRight,
@@ -132,5 +133,90 @@ describe('sound manager', () => {
             'assets/sounds/mob/villager/say.wav',
         ]);
         expect(audioInstances.every((audio) => audio.play.mock.calls.length === 1)).toBe(true);
+    });
+
+    it('reports playback failures through an injected logger without throwing', async () => {
+        const playbackError = new DOMException('Playback was blocked', 'NotAllowedError');
+        const onAudioError = vi.fn();
+        const onPlaybackError = vi.fn();
+        const createAudio = vi.fn((src) => ({
+            src,
+            volume: 1,
+            play: vi.fn(() => Promise.reject(playbackError)),
+            pause: vi.fn(),
+            addEventListener: vi.fn(),
+        }));
+        const sounds = createSoundManager({ createAudio, random: () => 0, onAudioError });
+
+        sounds.playClick();
+        sounds.playAudioAsset('assets/sounds/axolotl/c4.wav', { onPlaybackError });
+        await Promise.resolve();
+
+        expect(createAudio).toHaveBeenCalledTimes(2);
+        expect(onAudioError).toHaveBeenCalledWith(playbackError, {
+            source: 'assets/sounds/ui/click.wav',
+        });
+        expect(onAudioError).toHaveBeenCalledWith(playbackError, {
+            source: 'assets/sounds/axolotl/c4.wav',
+        });
+        expect(onPlaybackError).toHaveBeenCalledOnce();
+    });
+
+    it('logs default playback failures and isolates throwing error handlers', async () => {
+        const playbackError = new DOMException('Playback was blocked', 'NotAllowedError');
+        const defaultWarning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubGlobal(
+            'Audio',
+            class {
+                play() {
+                    return Promise.reject(playbackError);
+                }
+            },
+        );
+
+        playClick();
+        await Promise.resolve();
+        expect(defaultWarning).toHaveBeenCalledWith('[Audio] Playback failed:', {
+            source: 'assets/sounds/ui/click.wav',
+            error: playbackError,
+        });
+
+        const loggingError = new Error('logger failed');
+        const callbackError = new Error('callback failed');
+        const errorLogger = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const sounds = createSoundManager({
+            createAudio: () => ({ volume: 1, play: () => Promise.reject(playbackError) }),
+            onAudioError: () => {
+                throw loggingError;
+            },
+        });
+        sounds.playAudioAsset('assets/sounds/ui/fail.wav', {
+            onPlaybackError: () => {
+                throw callbackError;
+            },
+        });
+        await Promise.resolve();
+
+        expect(errorLogger).toHaveBeenNthCalledWith(1, '[Audio] Error handler failed:', loggingError);
+        expect(errorLogger).toHaveBeenNthCalledWith(2, '[Audio] Playback callback failed:', callbackError);
+    });
+
+    it('reports synchronous playback errors without throwing', () => {
+        const playbackError = new Error('play failed synchronously');
+        const onAudioError = vi.fn();
+        const sounds = createSoundManager({
+            createAudio: () => ({
+                volume: 1,
+                play() {
+                    throw playbackError;
+                },
+            }),
+            onAudioError,
+        });
+
+        expect(() => sounds.playClick()).not.toThrow();
+        expect(onAudioError).toHaveBeenCalledWith(playbackError, {
+            source: 'assets/sounds/ui/click.wav',
+        });
     });
 });

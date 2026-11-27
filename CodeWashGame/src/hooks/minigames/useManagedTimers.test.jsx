@@ -10,6 +10,23 @@ afterEach(() => {
 });
 
 describe('useManagedTimers', () => {
+    it('uses the injected timer scheduler for callbacks and cleanup', () => {
+        vi.useFakeTimers();
+        const timers = {
+            setTimeout: vi.fn((callback, delay) => setTimeout(callback, delay)),
+            clearTimeout: vi.fn((timerId) => clearTimeout(timerId)),
+        };
+        const { result, unmount } = renderHook(() => useManagedTimers(true, timers));
+        const callback = vi.fn();
+
+        act(() => result.current.scheduleTimeout(callback, 250));
+        expect(timers.setTimeout).toHaveBeenCalledWith(expect.any(Function), 250);
+        unmount();
+        expect(timers.clearTimeout).toHaveBeenCalledOnce();
+        act(() => vi.advanceTimersByTime(250));
+        expect(callback).not.toHaveBeenCalled();
+    });
+
     it('runs scheduled callbacks at their original delay and removes completed timers', () => {
         vi.useFakeTimers();
         const { result } = renderHook(() => useManagedTimers());

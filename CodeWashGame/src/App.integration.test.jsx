@@ -19,6 +19,7 @@ vi.mock('./utils/soundManager', () => ({
     getBGMManager: () => sound.bgm,
     setSfxVolume: sound.setSfxVolume,
     getSfxVolume: sound.getSfxVolume,
+    playAudioAsset: sound.play,
     playActionCardLeft: sound.play,
     playActionCardRight: sound.play,
     playClick: sound.play,
@@ -63,6 +64,15 @@ afterEach(() => {
 });
 
 describe('save loading and persistence', () => {
+    it('uses the injected clock when recording the login date', () => {
+        const clock = { now: vi.fn(() => Date.parse('2026-01-02T03:04:05.000Z')) };
+
+        render(<App clock={clock} random={() => 0} />);
+
+        expect(readProfile(1).stats.loginDates).toContain('2026-01-02');
+        expect(clock.now).toHaveBeenCalled();
+    });
+
     it('loads legacy, partial profile data and saves the completed state in the current format', () => {
         localStorage.setItem(
             'heroSkills_v23',
