@@ -3,6 +3,7 @@
  * Centralized sound management for the game including BGM shuffle, UI sounds, and mob sounds.
  */
 import { systemRandom } from './systemEffects';
+import { recordDiagnostic } from './diagnostics/diagnosticLog';
 
 // BGM tracks discovered from public/assets/sounds/bgm/
 const BGM_TRACKS = [
@@ -167,6 +168,11 @@ const getMobFolder = (mobName) => {
 
 const defaultAudioErrorHandler = (error, details) => {
     console.warn('[Audio] Playback failed:', { ...details, error });
+    recordDiagnostic({
+        category: 'audio',
+        message: 'Audio playback failed',
+        details: { source: details.source, errorName: error?.name || 'Error' },
+    });
 };
 
 export const createSoundManager = ({

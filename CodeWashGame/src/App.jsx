@@ -33,6 +33,7 @@ import {
 import { getNewlyUnlockedAchievements, getNewTierAchievements } from './utils/achievementUtils';
 import { isSpeechRecognitionSupported } from './utils/speechRecognition';
 import { systemClock, systemRandom, systemTimers } from './utils/systemEffects';
+import { attachRuntimeErrorCapture } from './utils/diagnostics/diagnosticLog';
 
 const App = ({ clock = systemClock, random = systemRandom, timers = systemTimers, speechRecognitionFactory } = {}) => {
     const { scheduleTimeout } = useManagedTimers(true, timers);
@@ -94,6 +95,8 @@ const App = ({ clock = systemClock, random = systemRandom, timers = systemTimers
     const [bgmVol, setBgmVol] = useState(0.3);
     const [sfxVol, setSfxVolState] = useState(0.5);
     const bgmManager = useRef(getBGMManager());
+
+    useEffect(() => attachRuntimeErrorCapture(), []);
 
     // Update BGM volume
     useEffect(() => {
@@ -428,6 +431,7 @@ const App = ({ clock = systemClock, random = systemRandom, timers = systemTimers
                     handleParentVerified,
                     skills,
                     stats,
+                    bugReportContext: { theme: activeTheme, gameState: { skills, stats } },
                     battlingSkillId,
                     endBattle,
                 }}

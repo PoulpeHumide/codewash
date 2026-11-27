@@ -1,8 +1,15 @@
+import { recordDiagnostic } from '../diagnostics/diagnosticLog';
+
 const resolveStorage = (storageProvider) =>
     typeof storageProvider === 'function' ? storageProvider() : storageProvider;
 
 const warnStorageError = (operation, key, error) => {
     console.warn(`Failed to ${operation} localStorage key "${key}":`, error);
+    recordDiagnostic({
+        category: 'storage',
+        message: 'A local save operation failed',
+        details: { operation, key, errorName: error?.name || 'Error' },
+    });
 };
 
 export const createStorageAdapter = (storageProvider = () => globalThis.localStorage) => {

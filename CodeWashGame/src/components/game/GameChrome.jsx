@@ -43,6 +43,7 @@ export default function GameChrome({
     handleParentVerified,
     skills,
     stats,
+    bugReportContext,
     battlingSkillId,
     endBattle,
 }) {
@@ -131,7 +132,11 @@ export default function GameChrome({
                 currentSkills={skills}
             />
             <ResetModal isOpen={isResetOpen} onClose={() => setIsResetOpen(false)} onConfirm={handleReset} />
-            <BugReportModal isOpen={isBugReportOpen} onClose={() => setIsBugReportOpen(false)} />
+            <BugReportModal
+                isOpen={isBugReportOpen}
+                onClose={() => setIsBugReportOpen(false)}
+                context={bugReportContext}
+            />
 
             <button
                 onClick={toggleFullscreen}
