@@ -19,6 +19,7 @@ import {
     setSfxVolume,
     UI_SOUND_NAMES,
 } from './soundManager';
+import { diagnosticBuffer } from './diagnostics/diagnosticLog';
 
 const audioInstances = [];
 
@@ -163,6 +164,7 @@ describe('sound manager', () => {
     });
 
     it('logs default playback failures and isolates throwing error handlers', async () => {
+        diagnosticBuffer.clear();
         const playbackError = new DOMException('Playback was blocked', 'NotAllowedError');
         const defaultWarning = vi.spyOn(console, 'warn').mockImplementation(() => {});
         vi.stubGlobal(
@@ -179,6 +181,11 @@ describe('sound manager', () => {
         expect(defaultWarning).toHaveBeenCalledWith('[Audio] Playback failed:', {
             source: 'assets/sounds/ui/click.wav',
             error: playbackError,
+        });
+        expect(diagnosticBuffer.getRecent().at(-1)).toMatchObject({
+            category: 'audio',
+            message: 'Audio playback failed',
+            details: { source: 'assets/sounds/ui/click.wav', errorName: 'NotAllowedError' },
         });
 
         const loggingError = new Error('logger failed');

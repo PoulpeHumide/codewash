@@ -141,7 +141,10 @@ describe('display modals and achievement toasts', () => {
         expect(document.body.textContent).not.toContain('Discovered a bug?');
         rerender(<BugReportModal isOpen onClose={onClose} />);
         fireEvent.click(document.body.querySelector('.fixed.inset-0 > .absolute'));
+        expect(onClose).toHaveBeenCalledOnce();
         expect(screen.getByText('Discovered a bug?')).not.toBeNull();
+        rerender(<BugReportModal isOpen={false} onClose={onClose} />);
+        expect(screen.queryByText('Discovered a bug?')).toBeNull();
     });
 
     it('handles unknown, base, and tiered achievements', () => {

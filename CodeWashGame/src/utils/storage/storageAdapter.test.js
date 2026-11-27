@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { browserStorage, createStorageAdapter } from './storageAdapter';
+import { diagnosticBuffer } from '../diagnostics/diagnosticLog';
 
 const createMemoryStorage = () => {
     const values = new Map();
@@ -49,6 +50,7 @@ describe('storage adapter', () => {
     });
 
     it('handles storage access and quota errors explicitly', () => {
+        diagnosticBuffer.clear();
         const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const quotaError = new DOMException('Storage quota exceeded', 'QuotaExceededError');
         const blockedStorage = {
@@ -70,6 +72,14 @@ describe('storage adapter', () => {
         expect(adapter.removeItem('profile')).toBe(false);
         expect(warning).toHaveBeenCalledWith('Failed to write localStorage key "save":', quotaError);
         expect(warning).toHaveBeenCalledTimes(4);
+        expect(
+            diagnosticBuffer.getRecent().find((entry) => entry.details.errorName === 'QuotaExceededError'),
+        ).toMatchObject({
+            category: 'storage',
+            message: 'A local save operation failed',
+            details: { operation: 'write', key: 'profile', errorName: 'QuotaExceededError' },
+        });
+        diagnosticBuffer.clear();
     });
 
     it('resolves a storage provider lazily and uses the browser storage default', () => {

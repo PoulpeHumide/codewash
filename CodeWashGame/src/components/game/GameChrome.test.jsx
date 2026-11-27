@@ -19,7 +19,13 @@ vi.mock('../modals/ResetModal', () => ({
         ) : null,
 }));
 vi.mock('../modals/BugReportModal', () => ({
-    default: ({ isOpen, onClose }) => (isOpen ? <button onClick={onClose}>Close bug report</button> : null),
+    default: ({ isOpen, onClose, context }) =>
+        isOpen ? (
+            <>
+                <span data-testid="bug-report-theme">{context?.theme}</span>
+                <button onClick={onClose}>Close bug report</button>
+            </>
+        ) : null,
 }));
 vi.mock('../ui/PixelHeart', () => ({
     default: ({ filled }) => <span data-testid="heart" data-filled={filled} />,
@@ -62,6 +68,7 @@ const createProps = () => ({
     handleParentVerified: vi.fn(),
     skills: {},
     stats: {},
+    bugReportContext: { theme: 'minecraft', gameState: { skills: {}, stats: {} } },
     battlingSkillId: 'math',
     endBattle: vi.fn(),
 });
@@ -73,6 +80,7 @@ describe('GameChrome', () => {
 
         expect(screen.getAllByTestId('heart')).toHaveLength(10);
         expect(screen.getAllByTestId('heart').filter((heart) => heart.dataset.filled === 'true')).toHaveLength(3);
+        expect(screen.getByTestId('bug-report-theme').textContent).toBe('minecraft');
 
         const getIconButton = (selector) =>
             [...container.querySelectorAll('button')].find((button) => button.querySelector(selector));
