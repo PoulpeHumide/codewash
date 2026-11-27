@@ -52,7 +52,7 @@ Toutes les commandes se lancent depuis `CodeWashGame/` :
 | `npm run metrics:complexity` | Fonctions de complexité cyclomatique > 10 (ESLint `complexity`) |
 | `npm run metrics:duplication` | Blocs dupliqués (jscpd, ≥ 50 tokens) |
 
-Les tests actuels sont des **tests de caractérisation** : ils figent le comportement du code reçu, y compris ses bizarreries (marquées `QUIRK`). Un test qui casse signale un changement de comportement à justifier, pas forcément un bug. Les tests sont à côté du code testé (`src/**/*.test.js`). Le hasard et l'horloge sont contrôlés avec `vi.spyOn(Math, 'random')` et `vi.useFakeTimers()`.
+Les tests actuels sont des **tests de caractérisation** : ils figent le comportement du code reçu, y compris ses bizarreries (marquées `QUIRK`). Un test qui casse signale un changement de comportement à justifier, pas forcément un bug. Les tests sont à côté du code testé (`src/**/*.test.{js,jsx}`). Le hasard et les timers sont contrôlés avec `vi.spyOn(Math, 'random')` et `vi.useFakeTimers()`.
 
 ## Intégration continue
 
