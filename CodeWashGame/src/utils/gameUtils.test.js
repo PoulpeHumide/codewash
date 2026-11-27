@@ -202,10 +202,28 @@ describe('generateMathProblem', () => {
         expect(generateMathProblem(5)).toEqual({ type: 'math', question: '60 ÷ 10 = ?', answer: '6' });
     });
 
-    it('QUIRK: subtraction can yield a negative answer when the first operand is 0', () => {
-        // Comment in the source says "Ensure positive result", but a = 0 gives b = 1.
+    it('never asks a subtraction with a negative answer (DEBT-09)', () => {
+        for (let difficulty = 3; difficulty <= 5; difficulty++) {
+            for (let i = 0; i < 300; i++) {
+                const { question, answer } = generateMathProblem(difficulty);
+                if (question.includes(' - ')) expect(Number(answer)).toBeGreaterThanOrEqual(0);
+            }
+        }
+    });
+
+    it('asks 0 - 0 when the first operand of a subtraction is 0 (DEBT-09)', () => {
+        // Was "0 - 1 = ?" with answer -1 in the original code.
         mockRandom(0.5, 0, 0);
-        expect(generateMathProblem(3)).toEqual({ type: 'math', question: '0 - 1 = ?', answer: '-1' });
+        expect(generateMathProblem(3)).toEqual({ type: 'math', question: '0 - 0 = ?', answer: '0' });
+    });
+
+    it('keeps the second operand of a subtraction in [1, a] when a > 0', () => {
+        // a = floor(0.99 * 21) = 20; b = floor(0.99 * 20) + 1 = 20, then b = floor(0 * 20) + 1 = 1
+        mockRandom(0.5, 0.99, 0.99);
+        expect(generateMathProblem(3)).toEqual({ type: 'math', question: '20 - 20 = ?', answer: '0' });
+        vi.restoreAllMocks();
+        mockRandom(0.5, 0.99, 0);
+        expect(generateMathProblem(3)).toEqual({ type: 'math', question: '20 - 1 = ?', answer: '19' });
     });
 
     it('has a correct answer for every hardcoded order-of-operations problem (difficulty 6)', () => {

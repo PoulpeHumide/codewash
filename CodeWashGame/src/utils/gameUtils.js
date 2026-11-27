@@ -270,9 +270,9 @@ export const generateMathProblem = (difficulty) => {
             answer = (a + b).toString();
             break;
         case '-':
-            // Ensure positive result
+            // Ensure a non-negative result: b is in [1, a], or 0 when a is 0
             a = Math.floor(Math.random() * (maxVal - minVal + 1)) + minVal;
-            b = Math.floor(Math.random() * a) + 1; // b is always less than or equal to a
+            b = Math.min(a, Math.floor(Math.random() * a) + 1);
             question = `${a} - ${b} = ?`;
             answer = (a - b).toString();
             break;
