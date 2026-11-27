@@ -11,7 +11,7 @@ Jeu éducatif (lecture, écriture, calcul, mémoire, motifs, rangement) dévelop
 
 ## Prérequis
 
-- **Node.js ≥ 20.19** (exigé par Vite 7 ; testé avec Node 22 en CI et Node 24 en local) et **npm ≥ 10**
+- **Node.js ≥ 22.12** (requis par Electron 45 ; Vite 7 seul exige Node 20.19) et **npm ≥ 11.4** (requis pour la liste `allowScripts`)
 - Un navigateur basé sur Chromium (Chrome, Edge) pour la reconnaissance vocale du mini-jeu de lecture (`webkitSpeechRecognition`), voir `CodeWashGame/docs/MICROPHONE_FEATURE.md`
 - Windows uniquement pour produire l'exécutable portable (`electron-builder`). Le jeu lui-même tourne sur Linux, macOS et Windows.
 
@@ -23,7 +23,7 @@ npm ci          # installe exactement les versions du package-lock.json
 npm run dev     # serveur de développement : http://localhost:5173
 ```
 
-> Sans besoin d'Electron, `ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci` évite de télécharger son binaire (~100 Mo).
+> Avec Electron 45, le binaire est téléchargé au premier lancement d'une commande Electron, pas pendant `npm ci`. Pour le navigateur seul, aucun binaire Electron n'est nécessaire.
 
 Les sauvegardes sont dans le `localStorage` du navigateur. Pour repartir de zéro : outils de développement → Application → Local Storage → effacer.
 
@@ -31,8 +31,8 @@ Les sauvegardes sont dans le `localStorage` du navigateur. Pour repartir de zér
 
 ```bash
 cd CodeWashGame
-npm ci                  # sans ELECTRON_SKIP_BINARY_DOWNLOAD
-npm run electron:dev    # build Vite puis ouverture de la fenêtre Electron
+npm ci                  # installe les dépendances
+npm run electron:dev    # build Vite puis ouverture; télécharge le binaire au premier lancement
 npm run electron:build  # Windows : génère release/LevelUpRPG-Portable.exe
 ```
 
