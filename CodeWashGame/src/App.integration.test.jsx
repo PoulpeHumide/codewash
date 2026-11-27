@@ -56,8 +56,10 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    vi.clearAllTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
 });
 
 describe('save loading and persistence', () => {
@@ -224,6 +226,7 @@ describe('application controls', () => {
     });
 
     it('supports fullscreen changes, all challenge types, difficulty updates, and carousel drag', async () => {
+        vi.useFakeTimers();
         localStorage.setItem(
             'heroSkills_v23_p1',
             JSON.stringify({
