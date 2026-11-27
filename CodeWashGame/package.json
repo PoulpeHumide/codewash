@@ -32,8 +32,8 @@
         "@vitejs/plugin-react": "^5.1.1",
         "@vitest/coverage-v8": "^5.1.2",
         "autoprefixer": "^10.4.22",
-        "electron": "^39.8.5",
-        "electron-builder": "^26.18.1",
+        "electron": "45.5.0",
+        "electron-builder": "26.18.0",
         "eslint": "^9.39.1",
         "eslint-plugin-react-hooks": "^7.0.1",
         "eslint-plugin-react-refresh": "^0.4.24",
@@ -45,7 +45,29 @@
         "vitest": "^5.1.2"
     },
     "overrides": {
-        "vite": "npm:rolldown-vite@7.2.5"
+        "vite": "npm:rolldown-vite@7.2.5",
+        "app-builder-lib": {
+            "minimatch": "11.0.1",
+            "@electron/universal": {
+                "minimatch": "11.0.1",
+                "dir-compare": {
+                    "minimatch": "3.1.5"
+                }
+            },
+            "@electron/asar": {
+                "minimatch": "3.1.5",
+                "glob": {
+                    "minimatch": "3.1.5"
+                }
+            },
+            "ejs": {
+                "jake": {
+                    "filelist": {
+                        "minimatch": "5.1.9"
+                    }
+                }
+            }
+        }
     },
     "build": {
         "appId": "com.leveluprpg.game",
@@ -72,7 +94,7 @@
         }
     },
     "allowScripts": {
-        "electron@39.8.10": true,
-        "electron-winstaller@5.4.0": true
+        "electron-winstaller@5.4.0": true,
+        "electron@45.5.0": true
     }
 }
