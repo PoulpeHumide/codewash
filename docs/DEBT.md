@@ -2,7 +2,7 @@
 
 **État de référence :** 16 novembre 2026 (mesures complétées le 24 novembre 2026)
 **Périmètre observé :** application React/Vite et son lanceur Electron, dans `CodeWashGame/`.
-**État des travaux :** aucun refactoring applicatif n’a été effectué. Le filet de sécurité est en cours de construction (DEBT-01) : tests de caractérisation des règles pures, CI sur PR et contrôle du formatage. Le code a été reformaté une fois avec Prettier (formatage seul, aucun changement de comportement).
+**État des travaux :** aucun refactoring applicatif n’a été effectué. Le filet de sécurité est en cours de construction (DEBT-01) : tests de caractérisation des règles pures et des sauvegardes, CI sur PR, contrôle du formatage et protection de `main`. Le code a été reformaté une fois avec Prettier (formatage seul, aucun changement de comportement).
 
 ## 0. Provenance du code de référence
 
@@ -67,10 +67,10 @@ Les priorités sont définies ainsi : **P0** = prérequis bloquant avant refacto
 
 | ID | Emplacement | Problème / odeur | Impact et risque | Effort | Priorité | Statut |
 |---|---|---|---|---|---|---|
-| DEBT-01 | `CodeWashGame/package.json`; `CodeWashGame/.github/workflows/build-exe.yml` | Pas de suite de tests ni de commande de test/coverage. Le seul workflow reçu est dans `CodeWashGame/.github/`, un dossier que GitHub **ne lit pas** (seul le `.github/` racine est pris en compte) : il n’a donc jamais tourné. Même déplacé, il ne ferait que compiler l’exécutable Windows sur `push` vers `main`, sans vérifier les PR, les tests, le formatage, la couverture ni l’analyse statique. | **Critique.** Les régressions de progression, sauvegardes et mini-jeux peuvent être livrées sans détection automatisée. Écart direct avec le filet de sécurité demandé par le sujet. | M | P0 | **En cours** : Vitest + 43 tests de caractérisation sur `src/utils/*`; `.github/workflows/ci.yml` (lint, tests, seuils de couverture, build) sur chaque PR. Contrôle du formatage (Prettier, `npm run format:check`) ajouté à la CI. Restent : caractérisation des sauvegardes et de `App.jsx`, protection de branche, sort de `build-exe.yml`. |
+| DEBT-01 | `CodeWashGame/package.json`; `CodeWashGame/.github/workflows/build-exe.yml` | Pas de suite de tests ni de commande de test/coverage. Le seul workflow reçu est dans `CodeWashGame/.github/`, un dossier que GitHub **ne lit pas** (seul le `.github/` racine est pris en compte) : il n’a donc jamais tourné. Même déplacé, il ne ferait que compiler l’exécutable Windows sur `push` vers `main`, sans vérifier les PR, les tests, le formatage, la couverture ni l’analyse statique. | **Critique.** Les régressions de progression, sauvegardes et mini-jeux peuvent être livrées sans détection automatisée. Écart direct avec le filet de sécurité demandé par le sujet. | M | P0 | **En cours** : Vitest + 43 tests de caractérisation sur `src/utils/*`; 21 tests de caractérisation des sauvegardes (`src/App.storage.test.jsx`, `<App />` monté dans jsdom); `.github/workflows/ci.yml` (lint, formatage, tests, seuils de couverture, build) sur chaque PR; `main` protégée (PR obligatoire, `quality-gate` requis, pas de contournement admin). Restent : caractérisation de la progression et du combat, du changement de profil et des succès; sort de `build-exe.yml`. |
 | DEBT-02 | [`src/App.jsx`](../CodeWashGame/src/App.jsx), notamment initialisation et chargement (l. 49–221), effets de sauvegarde (l. 285–294) et orchestration (l. 422–1108) | Composant de 1 492 lignes qui regroupe état global, logique métier, persistance, audio, parole, timers et rendu. | **Élevé.** Les changements locaux peuvent affecter des parcours sans lien apparent; tests unitaires difficiles et régressions difficiles à isoler. | L | P1 | Ouverte |
 | DEBT-03 | [`src/components/skills/SkillCard.jsx`](../CodeWashGame/src/components/skills/SkillCard.jsx), notamment états/hooks (l. 67–280), mini-jeux et rendu (l. 297–778) | Un seul composant de 778 lignes mélange plusieurs mini-jeux, leur état, leurs règles et le rendu. Plusieurs transitions sont pilotées par des `setTimeout` imbriqués. | **Élevé.** Les règles et effets de bord sont difficiles à tester séparément; le changement d’un mini-jeu peut dégrader les autres. Les callbacks différés compliquent l’annulation à la fin d’une partie. | L | P1 | Ouverte |
-| DEBT-04 | [`src/App.jsx`](../CodeWashGame/src/App.jsx), chargement (l. 50–221) et sauvegarde (l. 285–294) | L’accès au stockage et les conversions JSON sont distribués dans le composant. Le chargement des compétences contient des adaptations de compatibilité inline; certains `JSON.parse` d’initialisation et les écritures synchrones ne sont pas protégés contre des données ou un stockage indisponibles. | **Élevé.** Une sauvegarde invalide, un quota dépassé ou un contexte sans stockage peut faire échouer le démarrage ou la sauvegarde; la migration et la validation des profils sont difficiles à vérifier. | M | P1 | Ouverte |
+| DEBT-04 | [`src/App.jsx`](../CodeWashGame/src/App.jsx), chargement (l. 50–221) et sauvegarde (l. 285–294) | L’accès au stockage et les conversions JSON sont distribués dans le composant. Le chargement des compétences contient des adaptations de compatibilité inline; certains `JSON.parse` d’initialisation et les écritures synchrones ne sont pas protégés contre des données ou un stockage indisponibles. Constaté par les tests de caractérisation (`App.storage.test.jsx`, marqués `QUIRK`) : un `heroProfileNames_v1` ou `heroParentStatus_v1` corrompu empêche le jeu de démarrer; une sauvegarde de compétences corrompue est écrasée sans avertir le joueur; la branche de compatibilité qui recalcule `mobHealth` depuis la difficulté sauvegardée n’est jamais atteinte (les valeurs par défaut de difficulté 1 sont fusionnées avant le test); un `currentProfile_v1` non numérique fait sauvegarder sous `heroSkills_v23_pNaN`. | **Élevé.** Une sauvegarde invalide, un quota dépassé ou un contexte sans stockage peut faire échouer le démarrage ou la sauvegarde; la migration et la validation des profils sont difficiles à vérifier. | M | P1 | Ouverte |
 | DEBT-05 | [`src/App.jsx`](../CodeWashGame/src/App.jsx) (combat, l. 444–706; micro, l. 985–1100); [`src/components/skills/SkillCard.jsx`](../CodeWashGame/src/components/skills/SkillCard.jsx); [`src/utils/soundManager.js`](../CodeWashGame/src/utils/soundManager.js) | L’horloge, l’aléatoire, l’audio et la reconnaissance vocale sont appelés directement depuis l’interface et les règles. Les erreurs de lecture audio sont souvent absorbées par `.catch(() => {})`. | **Élevé.** Les tests de caractérisation sont non déterministes ou nécessitent de vrais périphériques; les erreurs audio ne sont pas observables et les effets retardés sont difficiles à contrôler. | M | P1 | Ouverte |
 | DEBT-06 | [`src/components/modals/BugReportModal.jsx`](../CodeWashGame/src/components/modals/BugReportModal.jsx) | La fenêtre affiche un message, mais ne permet ni de saisir ni d’envoyer un rapport. Aucun destinataire ou transport de rapport n’est configuré. | **Moyen à élevé.** Le bouton ne fournit pas la fonctionnalité de signalement attendue dans le sujet; les erreurs de production ne peuvent pas être transmises par ce parcours. | M | P1 | Ouverte |
 | DEBT-07 | [`src/components/ui/GlobalStyles.jsx`](../CodeWashGame/src/components/ui/GlobalStyles.jsx) et [`src/constants/gameData.jsx`](../CodeWashGame/src/constants/gameData.jsx) | Styles/animations globaux et données de jeu volumineux concentrés dans de grands modules; les frontières entre données de thème, présentation et comportement ne sont pas matérialisées par des interfaces explicites. | **Moyen.** Les changements de thème ou d’interface demandent de parcourir de gros fichiers et augmentent le risque d’incohérences visuelles. | M | P2 | Ouverte |
@@ -112,17 +112,22 @@ Node.js v24.22.2, npm 11.19.1, ESLint 9.39, Vitest 3.2.4 + `@vitest/coverage-v8`
 ### 3.3 Couverture de tests
 
 - **Avant (code reçu) :** aucun test, aucun runner. Couverture non mesurable, donc 0 ligne exécutée par des tests.
-- **Après le premier lot de caractérisation :** `npm run test:coverage`, 43 tests sur `src/utils/*`.
+- **Mesure :** `npm run test:coverage`, fournisseur V8 avec `experimentalAstAwareRemapping` (Vitest 3.2). Ce mode remappe la couverture V8 sur le source JSX à partir de l’AST.
 
-| Périmètre | Lignes | Branches | Fonctions |
-|---|---:|---:|---:|
-| Tout `src/` (hors tests et `main.jsx`) | 24,46 % (955/3 903) | 67,82 % | 41,37 % |
-| `utils/achievementUtils.js` | 100 % | 100 % | 100 % |
-| `utils/gameUtils.js` | 98,19 % | 66,66 % | 100 % |
-| `utils/mobDisplayUtils.js` | 95,83 % | 0 % | 100 % |
-| `App.jsx`, composants, `soundManager.js` | 0 % | 0 % | 0 % |
+> **Correction de mesure (26 novembre 2026).** Les premiers chiffres publiés ici (24,46 % de lignes) étaient produits sans remapping AST. Ce mode compte mal le JSX transformé : une fois `<App />` monté, il annonçait 90 % des lignes de `App.jsx` couvertes, alors que la plupart des gestionnaires ne s’exécutent jamais. Les deux lots ont été remesurés avec le remapping AST. Les seuils de `vite.config.js` sont recalés sur ces valeurs. Le seuil global des branches passe de 65 % à 50 % : c’est un changement d’outil de mesure, pas une perte de couverture.
 
-Le pourcentage global est gonflé par les fichiers de données (`constants/*`), exécutés à l’import. **Les flux critiques de l’interface (`App.jsx`, `SkillCard.jsx`, sauvegardes) ne sont pas encore couverts.** Les seuils de `vite.config.js` sont un cliquet posé juste sous ces valeurs.
+| Périmètre | Lot 1 : `src/utils/*` (43 tests) | Lot 2 : + sauvegardes (64 tests) |
+|---|---:|---:|
+| Tout `src/`, lignes | 17,09 % | **51,93 %** (887/1 708) |
+| Tout `src/`, branches | 11,6 % | **50,6 %** |
+| Tout `src/`, fonctions | 18,7 % (74/396) | **42,17 %** (167/396) |
+| `App.jsx`, lignes / fonctions | 0 % / 0 % | **36,62 %** / 29,62 % |
+| `components/skills/SkillCard.jsx`, lignes | 0 % | 41,08 % (rendu initial seulement) |
+| `utils/achievementUtils.js`, lignes | 100 % | 100 % |
+| `utils/gameUtils.js`, lignes / branches | 96,59 % / 81,6 % | 96,59 % / 81,6 % |
+| `utils/mobDisplayUtils.js`, lignes | 100 % | 100 % |
+
+Le lot 2 monte `<App />` : le rendu initial de tous les composants affichés est donc exécuté, mais pas leurs interactions. **La progression, le combat, le changement de profil et les succès ne sont pas encore caractérisés.** Les seuils de `vite.config.js` (global et `App.jsx`) sont un cliquet posé juste sous ces valeurs.
 
 ### 3.4 Complexité cyclomatique
 
