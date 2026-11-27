@@ -1,182 +1,226 @@
 # Registre de dette technique — CodeWash
 
-**État de référence :** 16 novembre 2026 (mesures complétées le 24 novembre 2026)
+**État de référence :** 27 novembre 2026 (audit avant nettoyage)
 **Périmètre observé :** application React/Vite et son lanceur Electron, dans `CodeWashGame/`.
-**État des travaux :** aucun refactoring applicatif n’a été effectué. Le filet de sécurité est en cours de construction (DEBT-01) : tests de caractérisation des règles pures, CI sur PR et contrôle du formatage. Le code a été reformaté une fois avec Prettier (formatage seul, aucun changement de comportement).
+**État des travaux :** audit documentaire uniquement; aucun code ni comportement applicatif n’a été modifié. Les tests de caractérisation, la CI, le lint et le build existent. La couverture globale actuelle est toutefois sous les seuils configurés (DEBT-01).
 
 ## 0. Provenance du code de référence
 
-| Élément | Valeur |
-|---|---|
-| Archive reçue | `CodeWashGame.tgz` (267 332 096 octets) |
-| Format réel | archive **tar POSIX non compressée** créée sur macOS, malgré l’extension `.tgz` (`file CodeWashGame.tgz`) |
-| SHA-256 | `a6eee7a148b8a3e084944cc84c51b72ec2fa2d39edc2425505cbb13b56b8af30` (`sha256sum CodeWashGame.tgz`) |
-| Contenu importé | 286 fichiers sous `CodeWashGame/`, commités sans modification et tagués `v0-original` |
-| Exclusions | 375 entrées `._*` (métadonnées AppleDouble macOS : attributs étendus, pas des fichiers du projet), volontairement non versionnées |
-| Vérification | `tar df CodeWashGame.tgz` ne signale aucune différence de contenu sur les fichiers importés |
-| Archive | non versionnée (`*.tgz` dans `.gitignore`); à joindre à la GitHub Release `v0-original` si on veut la conserver |
-| Git LFS | non nécessaire : aucun fichier ne dépasse 50 Mo |
+| Élément         | Valeur                                                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Archive reçue   | `CodeWashGame.tgz` (267 332 096 octets)                                                                                           |
+| Format réel     | archive **tar POSIX non compressée** créée sur macOS, malgré l’extension `.tgz` (`file CodeWashGame.tgz`)                         |
+| SHA-256         | `a6eee7a148b8a3e084944cc84c51b72ec2fa2d39edc2425505cbb13b56b8af30` (`sha256sum CodeWashGame.tgz`)                                 |
+| Contenu importé | 286 fichiers sous `CodeWashGame/`, commités sans modification et tagués `v0-original`                                             |
+| Exclusions      | 375 entrées `._*` (métadonnées AppleDouble macOS : attributs étendus, pas des fichiers du projet), volontairement non versionnées |
+| Vérification    | `tar df CodeWashGame.tgz` ne signale aucune différence de contenu sur les fichiers importés                                       |
+| Archive         | non versionnée (`*.tgz` dans `.gitignore`); à joindre à la GitHub Release `v0-original` si on veut la conserver                   |
+| Git LFS         | non nécessaire : aucun fichier ne dépasse 50 Mo                                                                                   |
 
 Ce registre décrit les dettes visibles dans le code et les écarts par rapport au protocole du sujet CodeWash. Les risques et estimations sont des évaluations initiales à confirmer avec l’équipe. Les mesures non exécutées sont signalées comme telles plutôt que supposées.
 
 ## 1. Cartographie de l’application
 
 ```mermaid
-flowchart TD
-    Entry["src/main.jsx"] --> App["src/App.jsx<br/>orchestration et état global"]
-    App --> Cards["components/skills/SkillCard.jsx<br/>cartes et mini-jeux"]
-    App --> Drawers["components/drawers/*<br/>menu, réglages, cosmétiques"]
+flowchart LR
+    Entry["src/main.jsx"] --> App["src/App.jsx<br/>orchestration / état de l'application"]
+    App --> Skill["components/skills/SkillCard.jsx<br/>cartes et mini-jeux"]
+    App --> Drawers["components/drawers/*"]
     App --> Modals["components/modals/*"]
     App --> UI["components/ui/*"]
-    App --> Data["constants/gameData.jsx<br/>thèmes, compétences et données"]
+    App --> Phantom["components/PhantomEvent.jsx"]
+    App --> Data["constants/gameData.jsx<br/>données du jeu"]
     App --> Ach["constants/achievements.js"]
-    App --> Utils["utils/*<br/>règles, succès, sons, affichage"]
-    App --> Storage["localStorage"]
-    App --> Speech["Web Speech API"]
-    Utils --> Audio["Audio / fichiers sons"]
-    Cards --> Audio
-    Entry --> GlobalCSS["index.css"]
+    App --> GameUtils["utils/gameUtils.js<br/>règles et génération"]
+    App --> AchUtils["utils/achievementUtils.js"]
+    App --> MobUtils["utils/mobDisplayUtils.js"]
+    App --> Sound["utils/soundManager.js"]
+    Skill --> Data
+    Skill --> GameUtils
+    Skill --> MobUtils
+    Skill --> Sound
+    Phantom --> Data
+    Phantom --> Sound
+    Entry --> CSS["src/index.css"]
     App --> GlobalStyles["components/ui/GlobalStyles.jsx"]
-    Electron["electron/main.cjs"] --> Dist["dist/index.html<br/>application compilée"]
+    App --> Storage["localStorage"]
+    Phantom --> Storage
+    App --> Speech["window.webkitSpeechRecognition"]
+    App --> Fullscreen["DOM Fullscreen API"]
+    Skill --> Audio["Audio API"]
+    Sound --> Audio
+    Electron["electron/main.cjs"] --> Window["BrowserWindow<br/>nodeIntegration=false<br/>contextIsolation=true"]
+    Window --> Dist["dist/index.html"]
+    Vite["Vite + PostCSS/Tailwind"] --> Dist
 ```
 
 ### Responsabilités et frontières observées
 
-| Zone | Responsabilité actuelle |
-|---|---|
-| `src/App.jsx` | État du joueur et des profils, chargement/sauvegarde, progression, combats, succès, thèmes, événements, reconnaissance vocale et composition de l’interface. |
-| `src/components/skills/SkillCard.jsx` | Présentation des compétences et logique interactive des jeux de mémoire, Simon, lecture, écriture, mathématiques et nettoyage. |
-| `src/constants/gameData.jsx`, `src/constants/achievements.js` | Données des compétences, thèmes, contenus, ennemis, objets et succès. |
-| `src/utils/gameUtils.js`, `achievementUtils.js`, `mobDisplayUtils.js` | Règles de jeu, progression et présentation de données. |
-| `src/utils/soundManager.js` | Création et lecture des sons et gestion de la musique de fond. |
-| `src/components/ui/GlobalStyles.jsx`, `src/index.css` | Styles globaux et animations. |
-| `electron/main.cjs` | Création de la fenêtre Electron et chargement du build Vite. |
+| Zone                                                                                     | Responsabilité actuelle                                                                                                                            |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main.jsx`                                                                           | Point d'entrée React; monte `App` et importe le CSS global.                                                                                        |
+| `src/App.jsx` (1 681 lignes)                                                             | État des profils et du joueur, persistance, progression, combats, succès, thèmes, événements, reconnaissance vocale et composition de l'interface. |
+| `src/components/skills/SkillCard.jsx` (1 111 lignes)                                     | Présentation des compétences et logique/état de plusieurs mini-jeux (mémoire, Simon, lecture, écriture, calcul, nettoyage).                        |
+| `src/components/drawers/*`, `modals/*`, `profile/*`, `ui/*`                              | Réglages, cosmétiques, menu, profils, confirmations et composants d'interface. `MenuDrawer_old.jsx` n'a pas d'import repéré dans `src/`.           |
+| `src/constants/gameData.jsx`, `src/constants/achievements.js`, `src/constants/assets.js` | Données des compétences, thèmes, contenus, ennemis, objets, succès et chemins d'assets.                                                            |
+| `src/utils/gameUtils.js`, `achievementUtils.js`, `mobDisplayUtils.js`                    | Règles de jeu, progression/succès et présentation de données.                                                                                      |
+| `src/utils/soundManager.js`                                                              | Singleton de gestion de la musique et des sons; crée et joue directement les objets `Audio`.                                                       |
+| `src/components/ui/GlobalStyles.jsx`, `src/index.css`                                    | Styles globaux, animations et CSS d'entrée.                                                                                                        |
+| `electron/main.cjs`                                                                      | Cycle de vie Electron, création de la fenêtre et chargement de `dist/index.html`.                                                                  |
+| `vite.config.js`, `postcss.config.js`, `tailwind.config.js`                              | Build/test/coverage Vitest, transformations React/Tailwind et configuration CSS.                                                                   |
 
 ### État et entrées/sorties
 
-- **État React partagé :** principalement dans `App.jsx` (profil courant, statistiques, compétences, thème, combat, challenge, volumes, état du micro et des panneaux). L’état temporaire des mini-jeux est dans `SkillCard.jsx`.
-- **Stockage persistant :** `localStorage`, chargé et écrit directement par `App.jsx`; `PhantomEvent.jsx` y stocke aussi son délai de réapparition. Les clés de sauvegarde sont versionnées dans leur nom, mais aucun schéma de sauvegarde central n’est défini.
-- **Audio :** API `Audio` directement appelée par le gestionnaire de sons et les mini-jeux.
-- **Reconnaissance vocale :** `window.webkitSpeechRecognition` directement utilisée par `App.jsx`.
-- **Navigateur/OS :** API plein écran du DOM et autorisation d’accès au microphone.
-- **Réseau :** aucun transport de rapport de bogue n’est configuré dans le flux observé; la fenêtre de rapport est actuellement une simple présentation.
+- **État React partagé :** concentré dans `App.jsx` (profil courant, statistiques, compétences, thème, combat, challenge, volumes, micro et panneaux); l'état des mini-jeux vit dans `SkillCard.jsx`. Les compteurs et refs de cycle de vie sont locaux aux composants.
+- **Singletons/variables mutables :** `soundManager.js` conserve un gestionnaire de musique au niveau du module; `electron/main.cjs` conserve `mainWindow`. L'état d'application principal est partagé par props depuis `App`, pas par un store externe.
+- **Fichiers et stockage :** l'application lit/écrit `localStorage` directement depuis `App.jsx` et `PhantomEvent.jsx`; les sauvegardes sont sérialisées JSON. Electron charge le fichier compilé `dist/index.html`; Vite génère le dossier `dist/`. Aucun accès applicatif direct à `fs` pour les sauvegardes n'a été repéré.
+- **Parsing :** les données sauvegardées sont converties par `JSON.parse`; plusieurs chemins de chargement ont des `try/catch` et avertissements, mais l'initialisation de `profileNames` et `parentStatus` parse sans validation/capture locale. `currentProfile` est aussi parsé depuis le stockage sans validation de plage/type.
+- **Audio :** `Audio` et `play()` sont appelés directement depuis `soundManager.js` et `SkillCard.jsx`; plusieurs rejets sont absorbés par `.catch(() => {})`.
+- **Microphone :** `window.webkitSpeechRecognition` est instancié depuis `App.jsx`; disponibilité et permission dépendent du navigateur/OS.
+- **Horloge/aléatoire/timers :** `Date.now()` et `Math.random()` sont utilisés dans les événements, les règles et les composants; les transitions asynchrones utilisent aussi des timers.
+- **DOM/OS :** API plein écran dans `App.jsx`; Electron utilise `BrowserWindow`, raccourcis clavier et cycle de vie de l'application.
+- **Réseau :** aucun `fetch`/transport applicatif repéré; le modal de rapport de bogue n'a pas de canal d'envoi configuré. Le serveur Vite et le téléchargement npm/Electron sont des flux de développement/installation distincts.
 
 ## 2. Registre des dettes
 
 Les priorités sont définies ainsi : **P0** = prérequis bloquant avant refactoring, **P1** = risque élevé ou fonctionnalité importante, **P2** = amélioration à planifier. Les efforts sont des tailles indicatives : **S** (≤ 1 jour), **M** (2–5 jours), **L** (> 5 jours), à valider après découpage en tâches.
 
-| ID | Emplacement | Problème / odeur | Impact et risque | Effort | Priorité | Statut |
-|---|---|---|---|---|---|---|
-| DEBT-01 | `CodeWashGame/package.json`; `CodeWashGame/.github/workflows/build-exe.yml` | Pas de suite de tests ni de commande de test/coverage. Le seul workflow reçu est dans `CodeWashGame/.github/`, un dossier que GitHub **ne lit pas** (seul le `.github/` racine est pris en compte) : il n’a donc jamais tourné. Même déplacé, il ne ferait que compiler l’exécutable Windows sur `push` vers `main`, sans vérifier les PR, les tests, le formatage, la couverture ni l’analyse statique. | **Critique.** Les régressions de progression, sauvegardes et mini-jeux peuvent être livrées sans détection automatisée. Écart direct avec le filet de sécurité demandé par le sujet. | M | P0 | **En cours** : Vitest + 43 tests de caractérisation sur `src/utils/*`; `.github/workflows/ci.yml` (lint, tests, seuils de couverture, build) sur chaque PR. Contrôle du formatage (Prettier, `npm run format:check`) ajouté à la CI. Restent : caractérisation des sauvegardes et de `App.jsx`, protection de branche, sort de `build-exe.yml`. |
-| DEBT-02 | [`src/App.jsx`](../CodeWashGame/src/App.jsx), notamment initialisation et chargement (l. 49–221), effets de sauvegarde (l. 285–294) et orchestration (l. 422–1108) | Composant de 1 492 lignes qui regroupe état global, logique métier, persistance, audio, parole, timers et rendu. | **Élevé.** Les changements locaux peuvent affecter des parcours sans lien apparent; tests unitaires difficiles et régressions difficiles à isoler. | L | P1 | Ouverte |
-| DEBT-03 | [`src/components/skills/SkillCard.jsx`](../CodeWashGame/src/components/skills/SkillCard.jsx), notamment états/hooks (l. 67–280), mini-jeux et rendu (l. 297–778) | Un seul composant de 778 lignes mélange plusieurs mini-jeux, leur état, leurs règles et le rendu. Plusieurs transitions sont pilotées par des `setTimeout` imbriqués. | **Élevé.** Les règles et effets de bord sont difficiles à tester séparément; le changement d’un mini-jeu peut dégrader les autres. Les callbacks différés compliquent l’annulation à la fin d’une partie. | L | P1 | Ouverte |
-| DEBT-04 | [`src/App.jsx`](../CodeWashGame/src/App.jsx), chargement (l. 50–221) et sauvegarde (l. 285–294) | L’accès au stockage et les conversions JSON sont distribués dans le composant. Le chargement des compétences contient des adaptations de compatibilité inline; certains `JSON.parse` d’initialisation et les écritures synchrones ne sont pas protégés contre des données ou un stockage indisponibles. | **Élevé.** Une sauvegarde invalide, un quota dépassé ou un contexte sans stockage peut faire échouer le démarrage ou la sauvegarde; la migration et la validation des profils sont difficiles à vérifier. | M | P1 | Ouverte |
-| DEBT-05 | [`src/App.jsx`](../CodeWashGame/src/App.jsx) (combat, l. 444–706; micro, l. 985–1100); [`src/components/skills/SkillCard.jsx`](../CodeWashGame/src/components/skills/SkillCard.jsx); [`src/utils/soundManager.js`](../CodeWashGame/src/utils/soundManager.js) | L’horloge, l’aléatoire, l’audio et la reconnaissance vocale sont appelés directement depuis l’interface et les règles. Les erreurs de lecture audio sont souvent absorbées par `.catch(() => {})`. | **Élevé.** Les tests de caractérisation sont non déterministes ou nécessitent de vrais périphériques; les erreurs audio ne sont pas observables et les effets retardés sont difficiles à contrôler. | M | P1 | Ouverte |
-| DEBT-06 | [`src/components/modals/BugReportModal.jsx`](../CodeWashGame/src/components/modals/BugReportModal.jsx) | La fenêtre affiche un message, mais ne permet ni de saisir ni d’envoyer un rapport. Aucun destinataire ou transport de rapport n’est configuré. | **Moyen à élevé.** Le bouton ne fournit pas la fonctionnalité de signalement attendue dans le sujet; les erreurs de production ne peuvent pas être transmises par ce parcours. | M | P1 | Ouverte |
-| DEBT-07 | [`src/components/ui/GlobalStyles.jsx`](../CodeWashGame/src/components/ui/GlobalStyles.jsx) et [`src/constants/gameData.jsx`](../CodeWashGame/src/constants/gameData.jsx) | Styles/animations globaux et données de jeu volumineux concentrés dans de grands modules; les frontières entre données de thème, présentation et comportement ne sont pas matérialisées par des interfaces explicites. | **Moyen.** Les changements de thème ou d’interface demandent de parcourir de gros fichiers et augmentent le risque d’incohérences visuelles. | M | P2 | Ouverte |
-| DEBT-08 | [`src/components/drawers/MenuDrawer_old.jsx`](../CodeWashGame/src/components/drawers/MenuDrawer_old.jsx) | Fichier de drawer historique présent; aucune référence d’import n’a été trouvée dans `src/`. jscpd le signale comme copie de `MenuDrawer.jsx` (4 clones, dont un de 133 lignes) : il représente la majorité de la duplication mesurée. | **Faible.** Peut induire l’équipe en erreur sur le composant réellement utilisé et encombrer les recherches. Vérifier l’absence de dépendance externe avant suppression. | S | P2 | À confirmer |
-| DEBT-09 | [`src/utils/gameUtils.js`](../CodeWashGame/src/utils/gameUtils.js), `generateMathProblem`, cas `'-'` | Le commentaire annonce « Ensure positive result », mais avec `range: [0, 20]` le premier opérande peut valoir 0 et `b` vaut alors au moins 1 : la question `0 - 1 = ?` attend `-1`. Comportement figé par un test `QUIRK`. | **Moyen.** Contenu pédagogique incohérent pour de jeunes joueurs (nombre négatif à un niveau qui n’en enseigne pas). | S | P2 | Ouverte (découverte par les tests de caractérisation) |
-| DEBT-10 | `CodeWashGame/package.json`, `CodeWashGame/package-lock.json` | Vulnérabilités npm dans les dépendances Electron et d’empaquetage. Mesure avant : `npm audit` signalait 8 vulnérabilités (2 élevées, 6 modérées). Electron a été mis à jour en 45.5.0; l’audit a démontré qu’electron-builder 25.1.0 introduisait 16 alertes dont une critique. Après validation, electron-builder 26.18.0 (même majeure que la version initiale) et des overrides de `minimatch` 11.0.1 limités aux branches 9.x/10.x vulnérables donnent `npm audit`: 0 vulnérabilité. `electron-winstaller` reste en 5.4.0; son script approuvé demeure explicitement épinglé. | **Résolu pour les vulnérabilités auditables.** `npm ci` reste reproductible; des avis de dépréciation non vulnérables (`glob`, `rimraf`, `inflight`, `boolean`) peuvent encore apparaître dans les outils Electron transitifs. | M | P1 | **Resolved** — mesure après : 0 vulnérabilité (`npm audit` et `npm ci`). |
+| ID      | Emplacement                                                                                                                                                                                                                                                                                                | Problème / odeur                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Impact (1–3) | Risque / probabilité (1–3) | Effort | Priorité | Statut                                                                                                                                                                                                           |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -----------: | -------------------------: | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DEBT-01 | `.github/workflows/ci.yml`, `CodeWashGame/vite.config.js`                                                                                                                                                                                                                                                  | Le filet de tests/CI existe (43 tests, lint, format, build), mais `npm run test:coverage` échoue aux seuils globaux actuels : les tests passent, couverture lignes 16,64 %, fonctions 18,68 %, branches 11,6 %, contre 24/40/65 %. La CI qui exécute ce contrôle ne peut donc pas être considérée verte. Les parcours `App.jsx`, composants et sauvegardes restent à 0 % dans le rapport.                                                                                                                                                                                                                                                                                                            |            3 |                          3 | M      | P0       | **Open** — ajouter des tests d'intégration/caractérisation ciblés; ne pas abaisser les seuils. Vérifier aussi la protection de branche et le workflow historique `CodeWashGame/.github/workflows/build-exe.yml`. |
+| DEBT-02 | [`src/App.jsx`](../CodeWashGame/src/App.jsx) (1 681 lignes)                                                                                                                                                                                                                                                | Composant monolithique regroupant état applicatif, logique métier, persistance, audio, parole, timers et rendu.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |            3 |                          3 | L      | P1       | **Open**                                                                                                                                                                                                         |
+| DEBT-03 | [`src/components/skills/SkillCard.jsx`](../CodeWashGame/src/components/skills/SkillCard.jsx) (1 111 lignes)                                                                                                                                                                                                | Un composant mélange l'état, les règles et le rendu de plusieurs mini-jeux; la fonction principale a une complexité ESLint de 107. Des transitions reposent sur des timers imbriqués.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |            3 |                          2 | L      | P1       | **Open**                                                                                                                                                                                                         |
+| DEBT-04 | [`src/App.jsx`](../CodeWashGame/src/App.jsx), chargement initial et fonctions `loadSkills`/`loadTheme`/`loadStats`                                                                                                                                                                                         | Accès `localStorage`, compatibilité des versions et parsing JSON sont distribués dans le composant. Certains parseurs ont une capture, mais `profileNames`/`parentStatus` sont parsés sans validation/capture; l'identifiant de profil issu du stockage n'est pas validé.                                                                                                                                                                                                                                                                                                                                                                                                                            |            3 |                          2 | M      | P1       | **Open** — caractériser le format existant avant toute migration.                                                                                                                                                |
+| DEBT-05 | [`src/App.jsx`](../CodeWashGame/src/App.jsx), [`src/components/skills/SkillCard.jsx`](../CodeWashGame/src/components/skills/SkillCard.jsx), [`src/components/PhantomEvent.jsx`](../CodeWashGame/src/components/PhantomEvent.jsx), [`src/utils/soundManager.js`](../CodeWashGame/src/utils/soundManager.js) | Logique et composants appellent directement stockage, horloge, aléatoire, timers, audio et Web Speech API; plusieurs erreurs `Audio.play()` sont absorbées par `.catch(() => {})`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |            2 |                          3 | M      | P1       | **Open**                                                                                                                                                                                                         |
+| DEBT-06 | [`src/components/modals/BugReportModal.jsx`](../CodeWashGame/src/components/modals/BugReportModal.jsx)                                                                                                                                                                                                     | Le modal affiche un message, mais ne collecte ni n'envoie de rapport; aucun destinataire/transport n'est configuré.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |            2 |                          2 | M      | P2       | **Open** — décision produit et confidentialité requises avant implémentation.                                                                                                                                    |
+| DEBT-07 | [`src/components/ui/GlobalStyles.jsx`](../CodeWashGame/src/components/ui/GlobalStyles.jsx) (1 302 lignes), [`src/constants/gameData.jsx`](../CodeWashGame/src/constants/gameData.jsx) (723 lignes)                                                                                                         | Styles/animations et données de jeu sont concentrés dans de gros modules; séparation données, présentation et comportement peu explicite.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |            2 |                          2 | M      | P2       | **Open**                                                                                                                                                                                                         |
+| DEBT-08 | [`src/components/drawers/MenuDrawer_old.jsx`](../CodeWashGame/src/components/drawers/MenuDrawer_old.jsx), `MenuDrawer.jsx`, `CosmeticsDrawer.jsx`, `ResetModal.jsx`, `ParentalVerificationModal.jsx`                                                                                                       | Le drawer historique n'a pas d'import repéré. jscpd détecte 11 groupes de clones, 206 lignes (3,99 %) et 1 662 tokens (3,86 %) dupliqués; les clones incluent les deux drawers, des blocs internes de `CosmeticsDrawer.jsx` et des modals similaires.                                                                                                                                                                                                                                                                                                                                                                                                                                                |            1 |                          2 | S–M    | P2       | **Open** — confirmer les usages, puis traiter séparément suppression et extraction des blocs.                                                                                                                    |
+| DEBT-09 | [`src/utils/gameUtils.js`](../CodeWashGame/src/utils/gameUtils.js), `generateMathProblem`, cas `'-'`                                                                                                                                                                                                       | La soustraction peut générer `0 - 1 = -1` malgré le commentaire annonçant un résultat positif; cas conservé par un test `QUIRK`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |            2 |                          2 | S      | P2       | **Open** — changement de règle pédagogique à décider explicitement.                                                                                                                                              |
+| DEBT-10 | `CodeWashGame/package.json`, `CodeWashGame/package-lock.json`                                                                                                                                                                                                                                              | Les vulnérabilités npm Electron/empaquetage ont été corrigées : Electron 45.5.0, electron-builder 26.18.0 et overrides `minimatch` ciblés; audit actuel : 0 vulnérabilité. L'historique de validation est 8 → 0. Des avis de dépréciation transitifs non vulnérables ont été signalés précédemment.                                                                                                                                                                                                                                                                                                                                                                                                  |            2 |                          1 | M      | P1       | **Resolved**                                                                                                                                                                                                     |
+| DEBT-11 | `CodeWashGame/package.json`, `CodeWashGame/package-lock.json`, `CodeWashGame/postcss.config.js`                                                                                                                                                                                                            | Optimisation à confirmer : 21 dépendances directes (3 runtime, 18 dev), aucune dépendance runtime mal classée n'a été repérée. `@types/react` et `@types/react-dom` sont les seuls candidats sans source TypeScript/TSX; ils peuvent servir à l'IntelliSense. Le lockfile contient 46 familles à versions multiples; la plupart semblent requises par des plages incompatibles ou des binaires natifs. `npm dedupe --dry-run` propose une déduplication de `ci-info` (4.5.0 → 4.3.1). Il a aussi affiché un avertissement de script d'installation en attente pour `electron-winstaller@5.4.0`, malgré l'entrée `allowScripts`; l'état d'approbation doit être confirmé lors d'un prochain `npm ci`. |            1 |                          2 | S      | P2       | **Open** — ne retirer/forcer aucun paquet avant vérification de l'usage et compatibilité.                                                                                                                        |
+| DEBT-12 | [`src/App.jsx`](../CodeWashGame/src/App.jsx), [`src/utils/soundManager.js`](../CodeWashGame/src/utils/soundManager.js), [`electron/main.cjs`](../CodeWashGame/electron/main.cjs)                                                                                                                           | État applicatif centralisé dans le composant racine et gestionnaires mutables au niveau module (`soundManager`, `mainWindow`). L'état React est transmis par props, mais les singletons et les effets sont difficiles à isoler dans les tests.                                                                                                                                                                                                                                                                                                                                                                                                                                                       |            2 |                          2 | M      | P2       | **Open**                                                                                                                                                                                                         |
 
-## 3. Mesures de référence
+## 3. Mesures de référence avant nettoyage
 
-Mesures relevées avant tout refactoring applicatif, sur le code du tag `v0-original`.
+Mesures exécutées le 27 novembre 2026 depuis `CodeWashGame/`. Aucune dépendance ni source n'a été modifiée pendant cet audit.
 
-### 3.1 Tailles de fichiers
+### 3.1 Commandes et résultats
 
-Sept fichiers source ciblés. Les tailles sont des lignes et octets de fichier, pas des mesures de complexité ou de duplication.
+| Mesure              | Commande exacte               | Résultat                                                                                                                                                                                                              |
+| ------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tests fonctionnels  | `npm test`                    | Réussi : 3 fichiers, 43 tests.                                                                                                                                                                                        |
+| Lint                | `npm run lint`                | Réussi : ESLint sans erreur ni avertissement.                                                                                                                                                                         |
+| Format              | `npm run format:check`        | Réussi : tous les fichiers au format Prettier.                                                                                                                                                                        |
+| Build               | `npm run build`               | Réussi : JS 362,79 kB (gzip 102,62 kB), CSS 61,80 kB (gzip 11,08 kB), HTML 0,49 kB (gzip 0,30 kB).                                                                                                                    |
+| Couverture          | `npm run test:coverage`       | Les 43 tests passent, mais commande en échec sur les seuils : lignes 16,64 % (282/1 694), statements 16,86 % (308/1 826), fonctions 18,68 % (74/396), branches 11,6 % (153/1 318). Seuils configurés : 24/24/40/65 %. |
+| Complexité          | `npm run metrics:complexity`  | 0 erreur, 14 avertissements au-dessus de 10.                                                                                                                                                                          |
+| Duplication         | `npm run metrics:duplication` | 11 groupes de clones, 206/5 167 lignes analysées (3,99 %), 1 662/43 087 tokens (3,86 %).                                                                                                                              |
+| Vulnérabilités      | `npm audit`                   | 0 vulnérabilité.                                                                                                                                                                                                      |
+| Installation propre | `npm ci`                      | Réussie lors de la validation des dépendances précédente; non relancée dans cet audit, car aucun manifeste n'a changé.                                                                                                |
 
-| Fichier | Lignes | Octets |
-|---|---:|---:|
-| `src/App.jsx` | 1 492 | 71 572 |
-| `src/components/skills/SkillCard.jsx` | 778 | 50 431 |
-| `src/components/ui/GlobalStyles.jsx` | 1 302 | 44 354 |
-| `src/constants/gameData.jsx` | 416 | 27 466 |
-| `src/utils/gameUtils.js` | 363 | 16 368 |
-| `src/utils/achievementUtils.js` | 217 | 7 199 |
-| `src/utils/soundManager.js` | 287 | 7 632 |
-| **Total des sept fichiers** | **4 855** | **225 022** |
+Le rapport de couverture montre notamment `App.jsx`, les drawers, les modals, les composants UI, `SkillCard.jsx` et `soundManager.js` à 0 %. Les tests existants couvrent surtout les fonctions utilitaires pures et les modules de données.
 
-Outil : GNU `wc -l -c` exécuté sur les sept chemins ci-dessus.
+### 3.2 Lignes par fichier
 
-### 3.2 Environnement de mesure
+Commandes exactes : `find src electron -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.cjs' -o -name '*.css' \) -print0 | sort -z | xargs -0 wc -l` et `wc -l package.json vite.config.js eslint.config.js postcss.config.js tailwind.config.js index.html`. `src/` contient 28 fichiers et 8 594 lignes physiques; avec `electron/main.cjs`, total 8 650 lignes.
 
-Node.js v24.22.2, npm 11.19.1, ESLint 9.39, Vitest 3.2.4 + `@vitest/coverage-v8`, jscpd 4.0.5 (versions exactes dans `package-lock.json`). Toutes les commandes se lancent depuis `CodeWashGame/`.
+| Fichier                                     | Lignes | Fichier                                           | Lignes |
+| ------------------------------------------- | -----: | ------------------------------------------------- | -----: |
+| `src/App.jsx`                               |  1 681 | `src/components/drawers/CosmeticsDrawer.jsx`      |    373 |
+| `src/components/drawers/MenuDrawer.jsx`     |    320 | `src/components/drawers/MenuDrawer_old.jsx`       |    262 |
+| `src/components/drawers/SettingsDrawer.jsx` |    118 | `src/components/modals/BugReportModal.jsx`        |     21 |
+| `src/components/modals/ResetModal.jsx`      |    121 | `src/components/PhantomEvent.jsx`                 |    150 |
+| `src/components/profile/ProfileCard.jsx`    |    212 | `src/components/skills/SkillCard.jsx`             |  1 111 |
+| `src/components/ui/AchievementToast.jsx`    |     74 | `src/components/ui/GlobalStyles.jsx`              |  1 302 |
+| `src/components/ui/MobWithAura.jsx`         |     65 | `src/components/ui/ParentalVerificationModal.jsx` |    132 |
+| `src/components/ui/PixelHeart.jsx`          |     98 | `src/components/ui/SafeImage.jsx`                 |     25 |
+| `src/constants/achievements.js`             |    345 | `src/constants/assets.js`                         |     37 |
+| `src/constants/gameData.jsx`                |    723 | `src/index.css`                                   |     54 |
+| `src/main.jsx`                              |     10 | `src/utils/achievementUtils.js`                   |    217 |
+| `src/utils/achievementUtils.test.js`        |    138 | `src/utils/gameUtils.js`                          |    382 |
+| `src/utils/gameUtils.test.js`               |    271 | `src/utils/mobDisplayUtils.js`                    |     42 |
+| `src/utils/mobDisplayUtils.test.js`         |     25 | `src/utils/soundManager.js`                       |    285 |
+| `electron/main.cjs`                         |     56 |                                                   |        |
 
-| Vérification | Commande | Résultat de référence |
-|---|---|---|
-| Installation | `npm ci` | OK |
-| Build | `npm run build` | OK : JS 362,79 kB (gzip 102,62 kB), CSS 61,77 kB (gzip 11,07 kB) |
-| Lint | `npm run lint` | 0 erreur, 0 avertissement |
+Fichiers de configuration/manifest supplémentaires : `package.json` 100 lignes, `vite.config.js` 33, `eslint.config.js` 25, `postcss.config.js` 6, `tailwind.config.js` 43, `index.html` 13. Le lockfile fait 8 270 lignes.
 
-### 3.3 Couverture de tests
+### 3.3 Dépendances npm
 
-- **Avant (code reçu) :** aucun test, aucun runner. Couverture non mesurable, donc 0 ligne exécutée par des tests.
-- **Après le premier lot de caractérisation :** `npm run test:coverage`, 43 tests sur `src/utils/*`.
+**Commandes :** `npm audit`; `npm ls --depth=0`; `npm dedupe --dry-run`; lecture croisée des imports `src/`, configurations et scripts npm. `depcheck` n'est pas installé et aucun outil n'a été ajouté pour cet audit.
 
-| Périmètre | Lignes | Branches | Fonctions |
-|---|---:|---:|---:|
-| Tout `src/` (hors tests et `main.jsx`) | 24,46 % (955/3 903) | 67,82 % | 41,37 % |
-| `utils/achievementUtils.js` | 100 % | 100 % | 100 % |
-| `utils/gameUtils.js` | 98,19 % | 66,66 % | 100 % |
-| `utils/mobDisplayUtils.js` | 95,83 % | 0 % | 100 % |
-| `App.jsx`, composants, `soundManager.js` | 0 % | 0 % | 0 % |
+- Dépendances directes : **21** (3 `dependencies`, 18 `devDependencies`). Les trois runtime (`react`, `react-dom`, `lucide-react`) sont importées par l'application. Les dépendances de build, lint, test, couverture, formatage et métriques sont en `devDependencies`; `electron` est utilisé par le lanceur et les scripts, `electron-builder` par le script et la configuration de packaging.
+- Les configurations confirment l'usage de `@vitejs/plugin-react`, `@tailwindcss/postcss`, `autoprefixer`, `postcss`, des plugins ESLint, Vitest, `@vitest/coverage-v8`, jscpd, Prettier, Electron et electron-builder.
+- `@types/react` et `@types/react-dom` ne sont pas consommés par des sources `.ts/.tsx` (aucune trouvée); ils restent des candidats à retirer seulement si l'équipe ne dépend pas de leurs complétions JavaScript dans l'éditeur.
+- Le lockfile contient **609 entrées `node_modules/`, 513 noms de paquets et 46 familles avec plusieurs versions**. Les versions multiples ne sont pas toutes redondantes : plusieurs respectent des plages majeures incompatibles ou correspondent aux binaires natifs de Lightning CSS. Le dry-run ne propose qu'une consolidation de `ci-info` sous `electron-builder`; aucun `npm dedupe` réel n'a été lancé.
+- `npm audit` ne signale aucune vulnérabilité. Les avis de dépréciation transitifs précédemment vus (`glob`, `rimraf`, `inflight`, `boolean`) ne sont pas des vulnérabilités et aucun override global n'est justifié par cette mesure.
 
-Le pourcentage global est gonflé par les fichiers de données (`constants/*`), exécutés à l’import. **Les flux critiques de l’interface (`App.jsx`, `SkillCard.jsx`, sauvegardes) ne sont pas encore couverts.** Les seuils de `vite.config.js` sont un cliquet posé juste sous ces valeurs.
+| Catégorie           | Paquets directs                                                                                           | Usage / classement                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Runtime             | `react`, `react-dom`, `lucide-react`                                                                      | Importés par l'application; classement `dependencies` cohérent.                                       |
+| Build et CSS        | `@vitejs/plugin-react`, `@tailwindcss/postcss`, `autoprefixer`, `postcss`, `vite` (`rolldown-vite@7.2.5`) | Configurations Vite/PostCSS/Tailwind et scripts de build; classement `devDependencies` cohérent.      |
+| Electron            | `electron`, `electron-builder`                                                                            | Lanceur/app de bureau et script `electron:build`; classement `devDependencies` cohérent.              |
+| Lint                | `@eslint/js`, `eslint`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`, `globals`             | Importés/référencés par `eslint.config.js`; classement `devDependencies` cohérent.                    |
+| Tests et couverture | `vitest`, `@vitest/coverage-v8`                                                                           | Scripts npm, tests et configuration de couverture; classement `devDependencies` cohérent.             |
+| Qualité             | `prettier`, `jscpd`                                                                                       | Scripts de format et métriques; classement `devDependencies` cohérent.                                |
+| Types à confirmer   | `@types/react`, `@types/react-dom`                                                                        | Pas de source TypeScript/TSX; candidats de nettoyage seulement après confirmation de l'usage éditeur. |
+
+Exemples de familles multi-version du lockfile : `minimatch` (3/5/11, versions utilisées par des branches de dépendances différentes et overrides ciblés), `semver` (5/6/7), `fs-extra` (7 à 11) et `lightningcss` (1.30/1.33, avec variantes natives). Ces répétitions ne prouvent pas à elles seules une dépendance inutile; seul `ci-info` ressort comme candidat concret du dry-run.
 
 ### 3.4 Complexité cyclomatique
 
-Outil : règle ESLint `complexity` (seuil 10), `npm run metrics:complexity`. **14 fonctions** dépassent 10. Les plus complexes :
+Outil : ESLint `complexity` (seuil 10), `npm run metrics:complexity`. **14 fonctions** dépassent 10. Les plus complexes :
 
-| Complexité | Emplacement |
-|---:|---|
-| 107 | `src/components/skills/SkillCard.jsx:65` (composant `SkillCard`) |
-| 31 | `src/App.jsx:94` |
-| 27 | `src/components/drawers/MenuDrawer.jsx:142` |
-| 24 | `src/App.jsx:569` |
-| 21 | `src/components/drawers/CosmeticsDrawer.jsx:108` |
-| 17 | `src/App.jsx:444` |
-| 16 | `src/App.jsx:49` et `src/App.jsx:1387` |
-| 15 | `src/components/drawers/CosmeticsDrawer.jsx:227`, `src/utils/gameUtils.js:33` (`getMobForSkill`) |
+| Complexité | Emplacement                                                                   |
+| ---------: | ----------------------------------------------------------------------------- |
+|        107 | `src/components/skills/SkillCard.jsx:97`                                      |
+|         31 | `src/App.jsx:134`                                                             |
+|         27 | `src/components/drawers/MenuDrawer.jsx:174`                                   |
+|         24 | `src/App.jsx:614`                                                             |
+|         21 | `src/components/drawers/CosmeticsDrawer.jsx:140`                              |
+|         17 | `src/App.jsx:486`                                                             |
+|         16 | `src/App.jsx:79`, `src/App.jsx:1523`                                          |
+|         15 | `src/components/drawers/CosmeticsDrawer.jsx:268`, `src/utils/gameUtils.js:47` |
 
 ### 3.5 Duplication
 
 Outil : jscpd 4.0.5, clones ≥ 50 tokens, tests exclus, `npm run metrics:duplication`.
 
-| Format | Fichiers | Clones | Lignes dupliquées |
-|---|---:|---:|---:|
-| JavaScript | 20 | 2 | 161 (6,47 %) |
-| JSX | 16 | 7 | 163 (5,69 %) |
-| CSS | 1 | 0 | 0 |
-| **Total** | **37** | **9** | **324 (5,99 %)** |
+| Format     | Fichiers analysés | Lignes analysées | Clones | Lignes dupliquées |   Tokens dupliqués |
+| ---------- | ----------------: | ---------------: | -----: | ----------------: | -----------------: |
+| JavaScript |                19 |            2 425 |      1 |       31 (1,28 %) |       215 (1,11 %) |
+| JSX        |                15 |            2 689 |     10 |      175 (6,51 %) |     1 447 (6,17 %) |
+| CSS        |                 1 |               53 |      0 |                 0 |                  0 |
+| **Total**  |            **35** |        **5 167** | **11** |  **206 (3,99 %)** | **1 662 (3,86 %)** |
 
-Sources principales : `MenuDrawer_old.jsx` ↔ `MenuDrawer.jsx` (DEBT-08), trois blocs répétés dans `CosmeticsDrawer.jsx`, `ResetModal.jsx` ↔ `ParentalVerificationModal.jsx`, deux blocs dans `SkillCard.jsx`.
-
-Comparer les mêmes périmètres avec les mêmes commandes avant/après chaque refactoring majeur.
+Clones détectés : `MenuDrawer.jsx` ↔ `MenuDrawer_old.jsx`, trois zones de `CosmeticsDrawer.jsx`, deux modals (`ResetModal.jsx` / `ParentalVerificationModal.jsx`) et des blocs de réglages. Comparer les mêmes périmètres et commandes avant/après tout refactoring.
 
 ## 4. Matrice de risque
 
-Échelle qualitative : impact et probabilité de 1 (faible) à 3 (fort). Le niveau est une appréciation initiale, pas une fréquence observée.
+Échelle qualitative : impact et probabilité de 1 (faible) à 3 (fort). Le produit Impact × Probabilité détermine la priorité indicative; il ne représente pas une fréquence observée.
 
-| Dette | Impact | Probabilité | Niveau initial | Justification |
-|---|---:|---:|---|---|
-| DEBT-01 — absence de filet de tests/CI PR | 3 | 3 | **Critique** | Aucun test n’empêche une régression et aucun contrôle n’est exécuté sur les PR. |
-| DEBT-02 — orchestration concentrée dans `App.jsx` | 3 | 3 | **Élevé** | De nombreuses fonctions métier et entrées/sorties partagent le même cycle de vie. |
-| DEBT-03 — mini-jeux concentrés dans `SkillCard.jsx` | 3 | 2 | **Élevé** | Logique asynchrone et interactions de plusieurs jeux sont couplées dans le même composant. |
-| DEBT-04 — persistance et migrations inline | 3 | 2 | **Élevé** | Les sauvegardes sont des données joueur persistantes et leur validation est dispersée. |
-| DEBT-05 — effets système non isolés | 2 | 3 | **Élevé** | Aléatoire, timers, audio et microphone varient selon le navigateur et les périphériques. |
-| DEBT-06 — rapport de bogue inactif | 2 | 2 | **Modéré** | Le parcours visible ne collecte ni ne transmet les informations de diagnostic. |
-| DEBT-07 — styles et données volumineux | 2 | 2 | **Modéré** | Les évolutions de thèmes et d’interface sont plus risquées et coûteuses à relire. |
-| DEBT-08 — ancien drawer non référencé | 1 | 2 | **Faible** | Dette de lisibilité, sans impact fonctionnel confirmé. |
-| DEBT-09 — soustraction pouvant donner un négatif | 2 | 2 | **Modéré** | Se produit dès que le tirage donne 0 comme premier opérande (1 chance sur 21 par soustraction). |
-| DEBT-10 — dépendances de dev/empaquetage vulnérables | 2 | 2 | **Modéré** | Touche l’exécutable Electron distribué, pas le bundle web. |
+| Dette                                                        | Impact | Probabilité | Produit | Niveau       | Justification                                                                                             |
+| ------------------------------------------------------------ | -----: | ----------: | ------: | ------------ | --------------------------------------------------------------------------------------------------------- |
+| DEBT-01 — seuils de couverture bloquants                     |      3 |           3 |       9 | **Critique** | Le rapport de couverture échoue et les flux UI/sauvegardes ne sont pas couverts.                          |
+| DEBT-02 — orchestration concentrée dans `App.jsx`            |      3 |           3 |       9 | **Critique** | De nombreuses fonctions métier et entrées/sorties partagent le même cycle de vie.                         |
+| DEBT-03 — mini-jeux concentrés dans `SkillCard.jsx`          |      3 |           2 |       6 | **Élevé**    | Plusieurs jeux et leurs transitions asynchrones sont couplés dans le même composant.                      |
+| DEBT-04 — persistance et parsing inline                      |      3 |           2 |       6 | **Élevé**    | Les sauvegardes sont persistantes et leur validation/migration est dispersée.                             |
+| DEBT-05 — effets système non isolés / erreurs audio masquées |      2 |           3 |       6 | **Élevé**    | Horloge, aléatoire, timers, audio et microphone varient selon navigateur/périphérique.                    |
+| DEBT-06 — rapport de bogue inactif                           |      2 |           2 |       4 | **Modéré**   | Le parcours visible ne collecte ni ne transmet de diagnostic.                                             |
+| DEBT-07 — styles et données volumineux                       |      2 |           2 |       4 | **Modéré**   | Les changements de thème et d'interface sont plus coûteux à relire.                                       |
+| DEBT-08 — duplication et ancien drawer                       |      1 |           2 |       2 | **Faible**   | Coût de maintenance; aucune dépendance fonctionnelle à l'ancien fichier n'est repérée.                    |
+| DEBT-09 — soustraction pouvant produire un négatif           |      2 |           2 |       4 | **Modéré**   | Contenu pédagogique incohérent possible, comportement actuel caractérisé.                                 |
+| DEBT-10 — vulnérabilités npm/Electron                        |      2 |           1 |       2 | **Résolu**   | `npm audit` retourne 0 vulnérabilité après mise à niveau et overrides ciblés.                             |
+| DEBT-11 — optimisation/déduplication npm                     |      1 |           2 |       2 | **Faible**   | Quelques candidats sont à confirmer; les dépendances transitives ne doivent pas être forcées sans preuve. |
+| DEBT-12 — état et singletons mutables                        |      2 |           2 |       4 | **Modéré**   | Concentration des responsabilités et dépendances implicites compliquent l'isolation des tests.            |
 
 ## 5. Plan d’attaque proposé
 
-1. **Établir le filet de sécurité avant les refactorings (DEBT-01).** Installer et documenter le projet, choisir un runner, ajouter des tests de caractérisation des parcours critiques (chargement/sauvegarde, progression et combat, changement de profil, fin de partie et succès), puis faire exécuter build, tests, lint, formatage, analyse statique et rapport de couverture sur chaque PR. Appliquer la cible du sujet : 100 % du nouveau code et au moins 80 % des lignes modifiées couvertes.
-2. **Isoler les effets de bord et sécuriser les sauvegardes (DEBT-04, DEBT-05).** Caractériser d’abord le format `localStorage` existant; centraliser validation, versionnement et migrations sans perdre les anciennes données. Injecter/encapsuler horloge, aléatoire, audio et reconnaissance vocale afin que les règles critiques soient testables sans navigateur ni microphone.
-3. **Séparer les responsabilités sans changer les contrats (DEBT-02, DEBT-03).** Extraire d’abord les règles métier pures et les services de persistance, puis les flux de combat/compétences et les mini-jeux. Garder les signatures et le format des sauvegardes compatibles; procéder par petits commits réversibles avec les tests au vert.
-4. **Livrer les fonctionnalités et la maintenance visibles (DEBT-06 à DEBT-08).** Décider du canal de signalement et de ses exigences de confidentialité avant d’implémenter l’envoi; découper les styles/données si cela facilite les changements prévus; confirmer que l’ancien drawer n’est pas utilisé puis le retirer dans un changement isolé.
-5. **Mesurer, documenter et transmettre.** Reprendre les mesures avec les mêmes outils après chaque étape majeure, mettre à jour ce registre avec résultats avant/après et statuts, et documenter installation, lancement, tests et décisions d’architecture.
+1. **Rendre la CI réellement verte (DEBT-01).** Ajouter des tests ciblés sur chargement/sauvegarde, profils, combat et composants UI, en gardant les seuils existants. Vérifier la branche protégée et l'emplacement du workflow de packaging historique.
+2. **Sécuriser les sauvegardes sans casser les données (DEBT-04, DEBT-12).** Caractériser le format `localStorage`, couvrir les parseurs, puis isoler validation/versionnement et accès au stockage. Préserver les clés, valeurs et migrations existantes.
+3. **Isoler les effets de bord observés (DEBT-05).** Encapsuler progressivement horloge, aléatoire, timers, audio et reconnaissance vocale; remplacer les catches silencieux par un comportement observable sans dégrader l'expérience sonore.
+4. **Découper les gros composants (DEBT-02, DEBT-03, DEBT-07).** Extraire règles pures/services et mini-jeux de manière incrémentale, sans modifier les contrats publics, la progression, les commandes ou le rendu.
+5. **Réduire les coûts de maintenance (DEBT-08, DEBT-11).** Vérifier les dépendances de `MenuDrawer_old.jsx`, traiter les blocs dupliqués et confirmer l'usage des types. Ne lancer ni `npm dedupe` ni override de dépendance sans relire le diff du lockfile et revalider Electron.
+6. **Décisions produit et suivi.** Décider si le rapport de bogue doit réellement être transmis et à quel destinataire (DEBT-06); planifier la règle de soustraction séparément (DEBT-09); conserver `npm audit` à 0 (DEBT-10).
+7. **Mesurer et transmettre.** Reprendre les mêmes commandes après chaque étape, consigner les résultats et ne déclarer la CI verte qu'après un run réussi.
 
 **Contrats à préserver pendant les travaux :** progression, difficulté et récompenses des compétences; comportement des profils et compatibilité des sauvegardes; parcours et commandes clavier/souris des mini-jeux; prise en charge vocale lorsqu’elle existe et comportement de repli lorsqu’elle n’existe pas; rendu des thèmes et lancement browser/Electron.
